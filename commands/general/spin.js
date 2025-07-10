@@ -1,8 +1,14 @@
 const { SlashCommandBuilder, EmbedBuilder } = require('discord.js');
-const { FieldValue } = require('firebase-admin/firestore');
-const db = require('../../firebase');
-const { checkRankUp } = require('../../utils/rankSystem');
+const db = require('../firebase');
+const { FieldValue } = require('firebase-admin/firestore'); // Import FieldValue properly
+const {
+  ensureUser,
+  isSpinOnCooldown,
+  getCooldownRemaining,
+  setSpinCooldown
+} = require('../utils/spin');
 
+// Weighted rewards list
 const rewards = [
   { type: 'xp', amount: 100, label: '+100 XP', weight: 25 },
   { type: 'xp', amount: 300, label: '+300 XP', weight: 20 },
@@ -16,98 +22,98 @@ const rewards = [
   { type: 'none', label: '😔 Try Again Later', weight: 8 }
 ];
 
-function weightedRandom(list) {
-  const totalWeight = list.reduce((acc, r) => acc + r.weight, 0);
-  if (totalWeight === 0) return { type: 'none', label: 'No rewards available', weight: 0 };
+// Function to pick a weighted random reward
+function weightedRandom(rewards) {
+  const totalWeight = rewards.reduce((sum, r) => sum + r.weight, 0);
   let rand = Math.random() * totalWeight;
-  for (const reward of list) {
+  for (const reward of rewards) {
     if (rand < reward.weight) return reward;
     rand -= reward.weight;
   }
-  return { type: 'none', label: 'No rewards available', weight: 0 };
+  return rewards[rewards.length - 1]; // fallback
 }
 
 module.exports = {
   data: new SlashCommandBuilder()
     .setName('spin')
-    .setDescription('Spin the Wheel of Fate'),
+    .setDescription('Spin the Wheel of Fate using your Red Pill spin'),
 
   async execute(interaction) {
+    const userId = interaction.user.id;
     await interaction.deferReply({ ephemeral: true });
 
-    const userId = interaction.user.id;
-    const userRef = db.collection('users').doc(userId);
-    const doc = await userRef.get();
-
-    if (!doc.exists) {
-      return interaction.editReply({
-        content: '❌ You have no spins available. Buy the **Red Pill** to gain a spin!'
-      });
-    }
-
-    const userData = doc.data();
-    const spins = userData.spinCount || 0;  // Ensure this matches your webhook field name!
-
-    if (spins <= 0) {
-      return interaction.editReply({
-        content: '❌ You don’t have any spins available. Buy the **Red Pill** to gain a spin!'
-      });
-    }
-
-    const reward = weightedRandom(rewards);
-    let rewardText = '';
-    let bonusDescription = '';
-
     try {
-      // Update spins and rewards atomically
-      if (reward.type === 'xp') {
-        await userRef.update({
-          spinCount: spins - 1,
-          xp: FieldValue.increment(reward.amount)
-        });
-        rewardText = `${reward.label} added to your XP!`;
-      } else if (reward.type === 'credits') {
-        await userRef.update({
-          spinCount: spins - 1,
-          credits: FieldValue.increment(reward.amount)
-        });
-        rewardText = `${reward.label} added to your Community Credits!`;
-      } else {
-        // For items and none, just decrement spins
-        await userRef.update({
-          spinCount: spins - 1
-        });
-        if (reward.type === 'item') {
-          rewardText = `🎁 You won a **${reward.label}**! Please DM <@${process.env.OWNER_ID}> to claim it.`;
-          bonusDescription = '*This reward is rare! You lucky beast.*';
-        } else {
-          rewardText = '😞 Nothing this time. Better luck next time, legend.';
-          bonusDescription = '*The wheel wasn’t in your favor...*';
-        }
+      // Load user data or create default
+      const user = await ensureUser(userId);
+      console.log(`[Spin] User ${userId} data loaded:`, user);
+
+      if (!user.spinCount || user.spinCount < 1) {
+        return interaction.editReply('❌ You don’t have any spins available. Buy a Red Pill to get spins!');
       }
+
+      // Check cooldown
+      const onCooldown = await isSpinOnCooldown(userId);
+      if (onCooldown) {
+        const remaining = await getCooldownRemaining(userId);
+        return interaction.editReply(`⏳ You need to wait **${remaining}** before spinning again.`);
+      }
+
+      // Pick reward
+      const reward = weightedRandom(rewards);
+      console.log(`[Spin] Reward picked for ${userId}:`, reward);
+
+      const userRef = db.collection('users').doc(userId);
+      const updateData = {
+        lastSpin: Date.now(),
+        spinCount: FieldValue.increment(-1),
+      };
+
+      switch (reward.type) {
+        case 'xp':
+          updateData.xp = FieldValue.increment(reward.amount);
+          break;
+        case 'credits':
+          updateData.credits = FieldValue.increment(reward.amount);
+          break;
+        case 'item':
+          updateData.items = FieldValue.arrayUnion(reward.rewardId);
+          break;
+        case 'none':
+          // no extra update needed
+          break;
+      }
+
+      await userRef.update(updateData);
+      console.log(`[Spin] Updated user ${userId} with`, updateData);
+
+      // Build reply
+      let replyMessage;
+      switch (reward.type) {
+        case 'xp':
+          replyMessage = `🎉 You won **${reward.label}**! Your XP has increased.`;
+          break;
+        case 'credits':
+          replyMessage = `💰 You won **${reward.label}**! Your credits have been added.`;
+          break;
+        case 'item':
+          replyMessage = `🎁 Congratulations! You received **${reward.label}**! Check your inventory.`;
+          break;
+        case 'none':
+          replyMessage = '😔 No luck this time. Try again later!';
+          break;
+      }
+
+      const embed = new EmbedBuilder()
+        .setTitle('🎡 Wheel of Fate Spin Result')
+        .setDescription(replyMessage)
+        .setColor('#00ff99')
+        .setFooter({ text: `Spins left: ${user.spinCount - 1}` });
+
+      await interaction.editReply({ embeds: [embed] });
+
     } catch (err) {
-      console.error('❌ Failed to update user spins/rewards:', err);
-      return interaction.editReply({
-        content: '❌ An error occurred while processing your spin. Please try again later.'
-      });
+      console.error('❌ Failed to process spin command:', err);
+      await interaction.editReply('❌ Something went wrong while processing your spin. Please try again later.');
     }
-
-    if (reward.type !== 'none' && reward.type !== 'item') {
-      const member = await interaction.guild.members.fetch(userId).catch(() => null);
-      if (member) await checkRankUp(userId, member);
-    }
-
-    const embed = new EmbedBuilder()
-      .setTitle('🎡 Wheel of Fate Result')
-      .setColor(reward.type === 'none' ? '#95a5a6' : '#f39c12')
-      .setDescription(`🧬 <@${userId}> spun the wheel...\n\n**${reward.label}**\n${rewardText}`)
-      .setFooter({ text: bonusDescription || 'Spin again by buying another Red Pill.' });
-
-    const logChannel = interaction.guild.channels.cache.get(process.env.SPIN_HISTORY_CHANNEL_ID);
-    if (logChannel) await logChannel.send({ embeds: [embed] });
-
-    return interaction.editReply({
-      content: `✅ Your spin is complete. Check the results in <#${process.env.SPIN_HISTORY_CHANNEL_ID}>.`
-    });
   }
 };
