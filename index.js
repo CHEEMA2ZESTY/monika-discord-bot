@@ -33,9 +33,6 @@ require('./utils/monthlyPriorityReset');
 require('./cron/resetBuyerMilestones');
 const { scheduleJTLDReset } = require('./utils/resetJTLDWeekly');
 
-// 🌐 Start webhook server
-require('./web');
-
 // 🤖 Login & Register Slash Commands
 client.login(process.env.TOKEN)
   .then(async () => {
@@ -55,8 +52,8 @@ client.login(process.env.TOKEN)
 
     // ⏰ Start weekly JTLD reset
     scheduleJTLDReset(client);
+
+    // 🌐 Start webhook server only after bot is ready
+    require('./web')(client);
   })
   .catch(console.error);
-
-// ✅ Export the client so webhook can access it
-module.exports = { client };

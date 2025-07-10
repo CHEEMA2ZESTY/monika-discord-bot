@@ -23,6 +23,9 @@ module.exports = {
       });
     }
 
+    // Defer response early to avoid timeout
+    await interaction.deferReply({ ephemeral: true });
+
     const reference = `redpill_${userId}_${Date.now()}`;
     await saveReference(reference, userId, {
       discordUserId: userId,
@@ -30,20 +33,25 @@ module.exports = {
       category: 'other'
     });
 
-    const paystackLink = await generatePaystackLink({
-      amount: 10000, // ₦100 in kobo
-      email: 'buyer@monika.gg',
-      reference,
-      metadata: {
-        discordUserId: userId,
-        pillType: 'red',
-        category: 'other'
-      }
-    });
+    try {
+      const paystackLink = await generatePaystackLink({
+        amount: 10000, // ₦100 in kobo
+        email: 'buyer@monika.gg',
+        reference,
+        metadata: {
+          discordUserId: userId,
+          pillType: 'red',
+          category: 'other'
+        }
+      });
 
-    await interaction.reply({
-      content: `❤️ Click below to buy the **Red Pill** and spin the **Wheel of Fate**:\n${paystackLink}`,
-      ephemeral: true,
-    });
+      await interaction.editReply({
+        content: `❤️ Click below to buy the **Red Pill** and spin the **Wheel of Fate**:\n${paystackLink}`,
+      });
+    } catch (err) {
+      await interaction.editReply({
+        content: '❌ Failed to generate Paystack link. Please try again shortly.',
+      });
+    }
   }
 };
