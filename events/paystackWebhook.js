@@ -3,7 +3,7 @@
 const { Timestamp, FieldValue } = require('firebase-admin/firestore');
 const db = require('../firebase');
 const config = require('../config');
-const client = require('../index').client; // Make sure you export `client` from index.js
+const client = require('../index').client;
 
 module.exports = async (event) => {
   try {
@@ -20,22 +20,20 @@ module.exports = async (event) => {
     });
     if (!guild) return;
 
-    // 🟣 STICKER PACK PURCHASE LOGIC
+    // 🔖 Handle Sticker Pack Purchase
     if (reference === 'gameschill-sticker-pack-kcqhcs') {
-      const customerEmail = event.data.customer?.email;
-      if (!customerEmail) return;
+      const email = event.data.customer?.email;
+      if (!email) return;
 
       const snapshot = await db.collection('users')
-        .where('email', '==', customerEmail)
+        .where('email', '==', email)
         .limit(1)
         .get();
 
       if (snapshot.empty) return;
 
-      const userDoc = snapshot.docs[0];
-      const userId = userDoc.id;
+      const userId = snapshot.docs[0].id;
       const member = await guild.members.fetch(userId).catch(() => null);
-
       if (member) {
         await member.roles.add(process.env.STICKER_ROLE_ID).catch(() => {});
         await db.collection('users').doc(userId).set({
@@ -51,35 +49,31 @@ module.exports = async (event) => {
       return;
     }
 
-    // 🧠 VIP UPGRADE LOGIC
+    // 💎 Handle VIP Tier Purchase
     if (reference.startsWith('vip')) {
       const [tierPart, userId] = reference.split('-');
       const vipTier = parseInt(tierPart.replace('vip', ''));
 
       if (!userId || isNaN(vipTier)) return;
 
-      const sellerRef = db.collection('sellers').doc(userId);
-      const sellerSnap = await sellerRef.get();
-      const sellerData = sellerSnap.exists ? sellerSnap.data() : {};
-
-      await sellerRef.set({ ...sellerData, vipTier }, { merge: true });
-
       const member = await guild.members.fetch(userId).catch(() => null);
-      const tierRoles = {
+      const vipRoles = {
         1: process.env.VIP_ROLE_BRONZE,
         2: process.env.VIP_ROLE_SILVER,
         3: process.env.VIP_ROLE_GOLD
       };
 
-      if (member && tierRoles[vipTier]) {
-        await member.roles.add(tierRoles[vipTier]).catch(() => {});
+      await db.collection('sellers').doc(userId).set({ vipTier }, { merge: true });
+
+      if (member && vipRoles[vipTier]) {
+        await member.roles.add(vipRoles[vipTier]).catch(() => {});
         console.log(`🎖 ${userId} upgraded to VIP ${vipTier}`);
       }
 
       return;
     }
 
-    // 💊 PILL PURCHASE LOGIC
+    // 💊 Handle Pill Purchases
     const userId = metadata.discordUserId;
     const pillType = metadata.pillType;
     const category = metadata.category || 'other';
@@ -87,8 +81,9 @@ module.exports = async (event) => {
     if (!userId || !pillType) return;
 
     const member = await guild.members.fetch(userId).catch(() => null);
-    const cooldownRef = db.collection('pillCooldowns').doc(userId);
     if (!member) return;
+
+    const cooldownRef = db.collection('pillCooldowns').doc(userId);
 
     if (pillType === 'blue') {
       await member.roles.add(process.env.BLUEPILL_ROLE_ID).catch(() => {});
@@ -111,9 +106,7 @@ module.exports = async (event) => {
       );
     }
 
-    const buyerRef = db.collection('users').doc(userId);
-    const statsRef = db.collection('buyerStats').doc(userId);
-
+    // 📊 Update XP and Spend in Firestore
     const xpRates = {
       account: 300,
       merch: 200,
@@ -123,13 +116,13 @@ module.exports = async (event) => {
 
     const xpGain = Math.floor(amount * (xpRates[category] || 50));
 
-    await buyerRef.set({
+    await db.collection('users').doc(userId).set({
       xp: FieldValue.increment(xpGain),
       buyerXP: FieldValue.increment(xpGain),
       buyerSpend: FieldValue.increment(amount)
     }, { merge: true });
 
-    await statsRef.set({
+    await db.collection('buyerStats').doc(userId).set({
       monthXP: FieldValue.increment(xpGain),
       monthSpend: FieldValue.increment(amount),
       lastPurchase: now,
@@ -137,7 +130,6 @@ module.exports = async (event) => {
     }, { merge: true });
 
     console.log(`🧮 ${userId} earned ${xpGain} XP and spent ₦${amount} [${category}]`);
-
   } catch (err) {
     console.error('🔥 Webhook processing error:', err);
   }
