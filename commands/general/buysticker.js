@@ -6,6 +6,7 @@ const {
   ButtonStyle
 } = require('discord.js');
 const { saveReference } = require('../../utils/paymentReferences');
+const generatePaystackLink = require('../../utils/generatePaystackLink');
 
 module.exports = {
   data: new SlashCommandBuilder()
@@ -17,12 +18,21 @@ module.exports = {
     const reference = `sticker_${userId}_${Date.now()}`;
 
     // Save a temporary reference to validate on webhook
-    saveReference(reference, userId, {
+    await saveReference(reference, userId, {
       discordUserId: userId,
       type: 'sticker'
     });
 
-    const paystackLink = `https://paystack.com/buy/gameschill-sticker-pack-kcqhcs?reference=${reference}`;
+    // Generate dynamic Paystack link
+    const paystackLink = await generatePaystackLink({
+      amount: 100000, // ₦1,000 in kobo
+      email: interaction.user.email ?? 'supporter@monika.gg',
+      reference,
+      metadata: {
+        discordUserId: userId,
+        type: 'sticker'
+      }
+    });
 
     const embed = new EmbedBuilder()
       .setTitle('🌟 GGS Sticker Pack')

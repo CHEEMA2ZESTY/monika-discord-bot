@@ -1,6 +1,7 @@
 const { SlashCommandBuilder } = require('discord.js');
 const { isOnCooldown, getCooldownRemaining } = require('../../utils/cooldowns');
 const { saveReference } = require('../../utils/paymentReferences');
+const generatePaystackLink = require('../../utils/generatePaystackLink');
 
 module.exports = {
   data: new SlashCommandBuilder()
@@ -22,16 +23,24 @@ module.exports = {
       });
     }
 
-    // 🔗 Save reference for webhook verification
     const reference = `redpill_${userId}_${Date.now()}`;
-    saveReference(reference, userId, {
+    await saveReference(reference, userId, {
       discordUserId: userId,
       pillType: 'red',
       category: 'other'
     });
 
-    // 💳 Correct Red Pill Paystack link
-    const paystackLink = `https://paystack.com/buy/red-pill-cjeozi`;
+    // Use a fixed default email here
+    const paystackLink = await generatePaystackLink({
+      amount: 50000, // ₦500 in kobo
+      email: 'buyer@monika.gg',
+      reference,
+      metadata: {
+        discordUserId: userId,
+        pillType: 'red',
+        category: 'other'
+      }
+    });
 
     await interaction.reply({
       content: `❤️ Click below to buy the **Red Pill** and spin the **Wheel of Fate**:\n${paystackLink}`,

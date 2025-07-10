@@ -14,32 +14,32 @@ async function getUser(userId) {
   return doc.data();
 }
 
-// Add XP to user
+// Add XP to user using atomic increment
 async function addXP(userId, amount) {
   const userRef = db.collection('users').doc(userId);
+  await userRef.set(
+    { xp: db.FieldValue.increment(amount) },
+    { merge: true }
+  );
+
   const doc = await userRef.get();
-
-  let data = doc.exists ? doc.data() : { xp: 0, credits: 0, spinCount: 0, boostCredits: 0 };
-  data.xp = (data.xp || 0) + amount;
-
-  await userRef.set(data);
-  return data;
+  return doc.data();
 }
 
-// Add Credits to user
+// Add Credits to user using atomic increment
 async function addCredits(userId, amount) {
   const userRef = db.collection('users').doc(userId);
+  await userRef.set(
+    { credits: db.FieldValue.increment(amount) },
+    { merge: true }
+  );
+
   const doc = await userRef.get();
-
-  let data = doc.exists ? doc.data() : { xp: 0, credits: 0, spinCount: 0, boostCredits: 0 };
-  data.credits = (data.credits || 0) + amount;
-
-  await userRef.set(data);
-  return data;
+  return doc.data();
 }
 
 module.exports = {
   getUser,
   addXP,
-  addCredits
+  addCredits,
 };
