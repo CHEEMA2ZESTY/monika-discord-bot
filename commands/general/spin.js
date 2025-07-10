@@ -1,3 +1,4 @@
+// commands/general/spin.js
 const { SlashCommandBuilder, EmbedBuilder } = require('discord.js');
 const db = require('../../firebase');
 const { checkRankUp } = require('../../utils/rankSystem');
@@ -35,19 +36,19 @@ module.exports = {
     const userId = interaction.user.id;
     const userRef = db.collection('users').doc(userId);
     const doc = await userRef.get();
-    const userData = doc.exists ? doc.data() : { xp: 0, credits: 0, spinCount: 0 };
+    const userData = doc.exists ? doc.data() : {};
 
-    if ((userData.spinCount || 0) <= 0) {
+    const spins = userData.redPillSpins || 0;
+    if (spins <= 0) {
       return interaction.editReply({
-        content: '❌ You don’t have any spins available. Buy the Red Pill to gain one!'
+        content: '❌ You don’t have any spins available. Buy the **Red Pill** to gain a spin!'
       });
     }
 
     const reward = weightedRandom(rewards);
     let rewardText = '';
     let bonusDescription = '';
-
-    const update = { spinCount: (userData.spinCount || 0) - 1 };
+    const update = { redPillSpins: spins - 1 };
 
     switch (reward.type) {
       case 'xp':
@@ -63,7 +64,7 @@ module.exports = {
         bonusDescription = '*This reward is rare! You lucky beast.*';
         break;
       case 'none':
-        rewardText = '😞 Nothing this time. Better luck tomorrow, legend.';
+        rewardText = '😞 Nothing this time. Better luck next time, legend.';
         bonusDescription = '*The wheel wasn’t in your favor...*';
         break;
     }
@@ -79,7 +80,7 @@ module.exports = {
       .setTitle('🎡 Wheel of Fate Result')
       .setColor(reward.type === 'none' ? '#95a5a6' : '#f39c12')
       .setDescription(`🧬 <@${userId}> spun the wheel...\n\n**${reward.label}**\n${rewardText}`)
-      .setFooter({ text: bonusDescription || 'Spin again tomorrow if you have a Red Pill!' });
+      .setFooter({ text: bonusDescription || 'Spin again by buying another Red Pill.' });
 
     const logChannel = interaction.guild.channels.cache.get(process.env.SPIN_HISTORY_CHANNEL_ID);
     if (logChannel) await logChannel.send({ embeds: [embed] });

@@ -1,5 +1,3 @@
-// events/paystackWebhook.js
-
 const { Timestamp, FieldValue } = require('firebase-admin/firestore');
 const db = require('../firebase');
 const config = require('../config');
@@ -44,7 +42,7 @@ module.exports = async (event, client) => {
     const member = await guild.members.fetch(userId).catch(() => null);
     if (!member) return;
 
-    // ✅ Validate reference
+    // ✅ Validate and clear the reference
     const refDoc = await db.collection('paymentReferences').doc(reference).get();
     if (!refDoc.exists) {
       console.warn(`🚫 Ignored unknown or reused reference: ${reference}`);
@@ -56,7 +54,7 @@ module.exports = async (event, client) => {
     const pillType = metadata.pillType;
     const cooldownRef = db.collection('pillCooldowns').doc(userId);
 
-    // 🌟 Sticker Purchase
+    // 🧷 Sticker Purchase
     if (metadata.type === 'sticker') {
       await safeAddRole(member, process.env.STICKER_ROLE_ID);
       await db.collection('users').doc(userId).set({
@@ -70,7 +68,7 @@ module.exports = async (event, client) => {
       }
     }
 
-    // 💎 VIP Tier (Buyer or Seller)
+    // 🎖 VIP Tier (Buyer or Seller)
     if (metadata.vipTier) {
       const vipTier = parseInt(metadata.vipTier);
       const vipRoles = {
@@ -87,7 +85,7 @@ module.exports = async (event, client) => {
       }
     }
 
-    // 💊 Blue Pill
+    // 💙 Blue Pill
     if (pillType === 'blue') {
       await safeAddRole(member, process.env.BLUEPILL_ROLE_ID);
       await cooldownRef.set({ lastUsed: Date.now() }, { merge: true });
@@ -107,8 +105,9 @@ module.exports = async (event, client) => {
       await safeAddRole(member, process.env.REDPILL_ROLE_ID);
       await cooldownRef.set({ lastUsed: Date.now() }, { merge: true });
 
-      await db.collection('buyerStats').doc(userId).set({
-        redSpinsAvailable: FieldValue.increment(1)
+      // ✅ Grant spin count for use in /spin
+      await db.collection('users').doc(userId).set({
+        spinCount: FieldValue.increment(1)
       }, { merge: true });
 
       const spinChannel = client.channels.cache.get(config.redPillSpinChannelId);
@@ -117,7 +116,7 @@ module.exports = async (event, client) => {
       }
     }
 
-    // 📊 XP + Spend Tracking (applies to all)
+    // 📊 XP + Spend Tracking
     const xpRates = {
       account: 300,
       merch: 200,
@@ -145,7 +144,6 @@ module.exports = async (event, client) => {
 
     console.log(`🧮 ${userId} earned ${xpGain} XP and spent ₦${amount} [${category}]`);
 
-    // 🛑 Fallback warning if metadata is missing expected keys
     if (!pillType && !metadata.type && !metadata.vipTier) {
       console.warn(`⚠️ Unhandled Paystack metadata:`, metadata);
     }
