@@ -1,0 +1,48 @@
+{
+  "1383834037122240777": {
+    "chapter": 2,
+    "choices": [
+      "Take the Light Path"
+    ],
+    "completed": true,
+    "unlockRoles": []
+  },
+  "1168999505908211773": {
+    "chapter": 2,
+    "step": 0,
+    "choices": [
+      "Enter the misty path 🌫️",
+      "Hide and observe 👀",
+      "Accept it 🔮",
+      "Speak with it 🐺",
+      "Yes, leap in! ✨",
+      "Take the staff 🪄",
+      "Read it 📖",
+      "Help them 🙌",
+      "Pray at the shrine 🙏",
+      "Choose the shadow door ⚫"
+    ],
+    "xpEarned": 1750,
+    "completed": true,
+    "unlockRoles": []
+  },
+  "1199048209037787166": {
+    "chapter": 2,
+    "step": 0,
+    "choices": [
+      "Enter the misty path 🌫️",
+      "Hide and observe 👀",
+      "Refuse it ❌",
+      "Back away slowly 😨",
+      "Yes, leap in! ✨",
+      "Take the sword ⚔️",
+      "Read it 📖",
+      "Help them 🙌",
+      "Pray at the shrine 🙏",
+      "Choose the golden door 🟡"
+    ],
+    "xpEarned": 1700,
+    "completed": true,
+    "unlockRoles": []
+  }
+}

@@ -1,0 +1,106 @@
+{
+  "1383834037122240777": {
+    "xp": 2286,
+    "credits": 275,
+    "spinCount": 0,
+    "lastDaily": "2025-07-06T20:23:08.691Z",
+    "lastSpin": null,
+    "items": [],
+    "boostCredits": 0,
+    "dailyXPDate": "2025-07-06",
+    "dailyXPTotal": 100,
+    "pillCooldown": 1751906076548
+  },
+  "827550764079251477": {
+    "xp": 31,
+    "credits": 0,
+    "spinCount": 0,
+    "lastDaily": null,
+    "lastSpin": null,
+    "items": [],
+    "boostCredits": 0
+  },
+  "1307789054129082369": {
+    "xp": 15,
+    "credits": 0,
+    "spinCount": 0,
+    "lastDaily": null,
+    "lastSpin": null,
+    "items": [],
+    "boostCredits": 0
+  },
+  "685232692597620772": {
+    "xp": 28,
+    "credits": 0,
+    "spinCount": 0,
+    "lastDaily": null,
+    "lastSpin": null,
+    "items": [],
+    "boostCredits": 0
+  },
+  "1390632263112462336": {
+    "xp": 33,
+    "credits": 0,
+    "spinCount": 0,
+    "lastDaily": null,
+    "lastSpin": null,
+    "items": [],
+    "boostCredits": 0
+  },
+  "1258766133478035587": {
+    "xp": 0,
+    "credits": 50,
+    "spinCount": 0,
+    "lastDaily": null,
+    "lastSpin": 1751625739812,
+    "items": [],
+    "boostCredits": 0
+  },
+  "741074909223977000": {
+    "xp": 619,
+    "credits": 75,
+    "spinCount": 0,
+    "lastDaily": 1751626464071,
+    "lastSpin": 1751627030129,
+    "items": [],
+    "boostCredits": 0
+  },
+  "1199048209037787166": {
+    "xp": 1806,
+    "credits": 75,
+    "spinCount": 0,
+    "lastDaily": 1751626467721,
+    "lastSpin": null,
+    "items": [],
+    "boostCredits": 0
+  },
+  "1045463227468894238": {
+    "xp": 9,
+    "credits": 0,
+    "spinCount": 0,
+    "lastDaily": null,
+    "lastSpin": 1751626749258,
+    "items": [
+      "Starlight"
+    ],
+    "boostCredits": 0
+  },
+  "1228158908791656529": {
+    "xp": 100,
+    "credits": 75,
+    "spinCount": 0,
+    "lastDaily": 1751645372551,
+    "lastSpin": null,
+    "items": [],
+    "boostCredits": 0
+  },
+  "1168999505908211773": {
+    "xp": 1750,
+    "credits": 0,
+    "spinCount": 0,
+    "lastDaily": null,
+    "lastSpin": null,
+    "items": [],
+    "boostCredits": 0
+  }
+}

@@ -1,0 +1,11 @@
+{
+  "guildId": "1383835786079895682",
+  "bluePillRoleId": "1390016512773066895",
+  "pillLogChannelId": "1390020527443153006",
+  "redPillSpinChannelId": "1390020301089280080",
+  "cooldownHours": 24,
+  "paystackLinks": {
+    "blue": "https://paystack.com/buy/blue-pill-aiuyyd",
+    "red": "https://paystack.com/buy/red-pill-cjeozi"
+  }
+}
