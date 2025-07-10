@@ -1,25 +1,12 @@
 const { Timestamp, FieldValue } = require('firebase-admin/firestore');
 const db = require('../firebase');
 const config = require('../config');
-
-async function safeAddRole(member, roleId, maxRetries = 3) {
-  if (!roleId) return false;
-  let attempt = 0;
-  while (attempt < maxRetries) {
-    try {
-      if (!member.roles.cache.has(roleId)) {
-        await member.roles.add(roleId);
-      }
-      return true;
-    } catch (err) {
-      attempt++;
-      console.warn(`⚠️ Failed to add role ${roleId} to ${member.id} (attempt ${attempt}):`, err);
-      await new Promise(res => setTimeout(res, 500));
-    }
-  }
-  console.error(`❌ Giving up adding role ${roleId} to ${member.id} after ${maxRetries} attempts.`);
-  return false;
-}
+const {
+  grantStickerRole,
+  grantVIPRole,
+  grantBluePill,
+  grantRedPill
+} = require('../utils/roleAutomation');
 
 module.exports = async (event, client) => {
   try {
@@ -52,98 +39,59 @@ module.exports = async (event, client) => {
 
     const category = metadata.category || 'other';
     const pillType = metadata.pillType;
-    const cooldownRef = db.collection('pillCooldowns').doc(userId);
 
-    // 🧷 Sticker Purchase
+    // 🧷 Sticker Pack
     if (metadata.type === 'sticker') {
-      await safeAddRole(member, process.env.STICKER_ROLE_ID);
-      await db.collection('users').doc(userId).set({
-        stickerPurchased: true,
-        stickerPurchasedAt: now
-      }, { merge: true });
-
-      const logChannel = client.channels.cache.get(config.pillLogChannelId);
-      if (logChannel) {
-        logChannel.send(`🧷 <@${userId}> just purchased the **Sticker Pack** and received access!`).catch(console.error);
-      }
+      await grantStickerRole(member, userId, client);
     }
 
     // 🎖 VIP Tier (Buyer or Seller)
     if (metadata.vipTier) {
       const vipTier = parseInt(metadata.vipTier);
-      const vipRoles = {
-        1: process.env.VIP_ROLE_BRONZE,
-        2: process.env.VIP_ROLE_SILVER,
-        3: process.env.VIP_ROLE_GOLD
-      };
-      const collection = category === 'sellervip' ? 'sellers' : 'users';
-      await db.collection(collection).doc(userId).set({ vipTier }, { merge: true });
-
-      if (vipRoles[vipTier]) {
-        await safeAddRole(member, vipRoles[vipTier]);
-        console.log(`🎖 ${userId} upgraded to VIP ${vipTier} (${collection})`);
-      }
+      const vipCategory = category === 'sellervip' ? 'sellers' : 'users';
+      await grantVIPRole(member, userId, vipTier, vipCategory);
     }
 
-    // 💙 Blue Pill
+    // 💊 Pills
     if (pillType === 'blue') {
-      await safeAddRole(member, process.env.BLUEPILL_ROLE_ID);
-      await cooldownRef.set({ lastUsed: Date.now() }, { merge: true });
-
-      await db.collection('users').doc(userId).set({
-        bluePillExpiresAt: Timestamp.fromMillis(Date.now() + 86400000)
-      }, { merge: true });
-
-      const logChannel = client.channels.cache.get(config.pillLogChannelId);
-      if (logChannel) {
-        logChannel.send(`💙 <@${userId}> paid successfully and got the **Blue Pill** role!`).catch(console.error);
-      }
+      await grantBluePill(member, userId, client);
     }
 
-    // ❤️ Red Pill
     if (pillType === 'red') {
-      await safeAddRole(member, process.env.REDPILL_ROLE_ID);
-      await cooldownRef.set({ lastUsed: Date.now() }, { merge: true });
-
-      // ✅ Grant spin count for use in /spin
-      await db.collection('users').doc(userId).set({
-        spinCount: FieldValue.increment(1)
-      }, { merge: true });
-
-      const spinChannel = client.channels.cache.get(config.redPillSpinChannelId);
-      if (spinChannel) {
-        spinChannel.send(`❤️ <@${userId}> paid for a **Red Pill**! Time to spin the **Wheel of Fate** 🎡`).catch(console.error);
-      }
+      await grantRedPill(member, userId, client);
     }
 
-    // 📊 XP + Spend Tracking
-    const xpRates = {
-      account: 300,
-      merch: 200,
-      wdp: 50,
-      other: 50,
-      boost: 150,
-      sellervip: 0,
-      vip: 0,
-      sticker: 0
-    };
-    const xpGain = Math.floor(amount * (xpRates[category] || 50));
+    // 📊 XP + Spend Tracking (Exclude pills, stickers, VIPs)
+    const excludedCategories = ['vip', 'sellervip', 'sticker'];
+    if (!excludedCategories.includes(category)) {
+      const xpRates = {
+        account: 300,
+        merch: 200,
+        wdp: 50,
+        other: 50,
+        boost: 150
+      };
+      const xpGain = Math.floor(amount * (xpRates[category] || 50));
 
-    await db.collection('users').doc(userId).set({
-      xp: FieldValue.increment(xpGain),
-      buyerXP: FieldValue.increment(xpGain),
-      buyerSpend: FieldValue.increment(amount)
-    }, { merge: true });
+      await db.collection('users').doc(userId).set({
+        xp: FieldValue.increment(xpGain),
+        buyerXP: FieldValue.increment(xpGain),
+        buyerSpend: FieldValue.increment(amount)
+      }, { merge: true });
 
-    await db.collection('buyerStats').doc(userId).set({
-      monthXP: FieldValue.increment(xpGain),
-      monthSpend: FieldValue.increment(amount),
-      lastPurchase: now,
-      [`categorySpend.${category}`]: FieldValue.increment(amount)
-    }, { merge: true });
+      await db.collection('buyerStats').doc(userId).set({
+        monthXP: FieldValue.increment(xpGain),
+        monthSpend: FieldValue.increment(amount),
+        lastPurchase: now,
+        [`categorySpend.${category}`]: FieldValue.increment(amount)
+      }, { merge: true });
 
-    console.log(`🧮 ${userId} earned ${xpGain} XP and spent ₦${amount} [${category}]`);
+      console.log(`🧮 ${userId} earned ${xpGain} XP and spent ₦${amount} [${category}]`);
+    } else {
+      console.log(`📦 ${userId} made a purchase: ₦${amount} [${category}]`);
+    }
 
+    // 🛑 Fallback warning
     if (!pillType && !metadata.type && !metadata.vipTier) {
       console.warn(`⚠️ Unhandled Paystack metadata:`, metadata);
     }

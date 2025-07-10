@@ -1,5 +1,5 @@
-// commands/general/spin.js
 const { SlashCommandBuilder, EmbedBuilder } = require('discord.js');
+const { FieldValue } = require('firebase-admin/firestore');
 const db = require('../../firebase');
 const { checkRankUp } = require('../../utils/rankSystem');
 
@@ -18,11 +18,13 @@ const rewards = [
 
 function weightedRandom(list) {
   const totalWeight = list.reduce((acc, r) => acc + r.weight, 0);
+  if (totalWeight === 0) return { type: 'none', label: 'No rewards available', weight: 0 };
   let rand = Math.random() * totalWeight;
   for (const reward of list) {
     if (rand < reward.weight) return reward;
     rand -= reward.weight;
   }
+  return { type: 'none', label: 'No rewards available', weight: 0 };
 }
 
 module.exports = {
@@ -36,9 +38,16 @@ module.exports = {
     const userId = interaction.user.id;
     const userRef = db.collection('users').doc(userId);
     const doc = await userRef.get();
-    const userData = doc.exists ? doc.data() : {};
 
-    const spins = userData.redPillSpins || 0;
+    if (!doc.exists) {
+      return interaction.editReply({
+        content: '❌ You have no spins available. Buy the **Red Pill** to gain a spin!'
+      });
+    }
+
+    const userData = doc.data();
+    const spins = userData.spinCount || 0;  // Ensure this matches your webhook field name!
+
     if (spins <= 0) {
       return interaction.editReply({
         content: '❌ You don’t have any spins available. Buy the **Red Pill** to gain a spin!'
@@ -48,30 +57,42 @@ module.exports = {
     const reward = weightedRandom(rewards);
     let rewardText = '';
     let bonusDescription = '';
-    const update = { redPillSpins: spins - 1 };
 
-    switch (reward.type) {
-      case 'xp':
-        update.xp = (userData.xp || 0) + reward.amount;
+    try {
+      // Update spins and rewards atomically
+      if (reward.type === 'xp') {
+        await userRef.update({
+          spinCount: spins - 1,
+          xp: FieldValue.increment(reward.amount)
+        });
         rewardText = `${reward.label} added to your XP!`;
-        break;
-      case 'credits':
-        update.credits = (userData.credits || 0) + reward.amount;
+      } else if (reward.type === 'credits') {
+        await userRef.update({
+          spinCount: spins - 1,
+          credits: FieldValue.increment(reward.amount)
+        });
         rewardText = `${reward.label} added to your Community Credits!`;
-        break;
-      case 'item':
-        rewardText = `🎁 You won a **${reward.label}**! Please DM <@${process.env.OWNER_ID}> to claim it.`;
-        bonusDescription = '*This reward is rare! You lucky beast.*';
-        break;
-      case 'none':
-        rewardText = '😞 Nothing this time. Better luck next time, legend.';
-        bonusDescription = '*The wheel wasn’t in your favor...*';
-        break;
+      } else {
+        // For items and none, just decrement spins
+        await userRef.update({
+          spinCount: spins - 1
+        });
+        if (reward.type === 'item') {
+          rewardText = `🎁 You won a **${reward.label}**! Please DM <@${process.env.OWNER_ID}> to claim it.`;
+          bonusDescription = '*This reward is rare! You lucky beast.*';
+        } else {
+          rewardText = '😞 Nothing this time. Better luck next time, legend.';
+          bonusDescription = '*The wheel wasn’t in your favor...*';
+        }
+      }
+    } catch (err) {
+      console.error('❌ Failed to update user spins/rewards:', err);
+      return interaction.editReply({
+        content: '❌ An error occurred while processing your spin. Please try again later.'
+      });
     }
 
-    await userRef.set(update, { merge: true });
-
-    if (reward.type !== 'none') {
+    if (reward.type !== 'none' && reward.type !== 'item') {
       const member = await interaction.guild.members.fetch(userId).catch(() => null);
       if (member) await checkRankUp(userId, member);
     }
