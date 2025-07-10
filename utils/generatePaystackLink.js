@@ -7,27 +7,22 @@ const CALLBACK_URL = process.env.PAYSTACK_CALLBACK_URL;
 /**
  * Generates a Paystack payment link with metadata
  * @param {Object} options
- * @param {string} options.userId - Discord user ID
- * @param {string} options.amount - Amount in kobo (₦1000 = 100000)
- * @param {string} options.description - Description of payment
- * @param {Object} options.metadata - Additional metadata for tracking (e.g., { pillType: 'red' })
- * @returns {Promise<string>} The payment link URL
+ * @param {number} options.amount - Amount in kobo (₦1000 = 100000)
+ * @param {string} options.email - Email of the payer (fallback if Discord doesn't provide)
+ * @param {string} options.reference - Unique reference ID to track transaction
+ * @param {Object} options.metadata - Additional metadata (e.g., { pillType: 'red', category: 'boost' })
+ * @returns {Promise<string>} - The Paystack payment link
  */
-async function generatePaystackLink({ userId, amount, description, metadata }) {
+async function generatePaystackLink({ amount, email, reference, metadata = {} }) {
   try {
-    const reference = `${metadata?.pillType || metadata?.type || 'pay'}_${userId}_${Date.now()}`;
-
     const res = await axios.post(
       'https://api.paystack.co/transaction/initialize',
       {
-        amount, // in kobo
-        email: `${userId}@fake.email`, // fallback email; you can replace with real email if stored
+        amount,
+        email,
         reference,
         callback_url: CALLBACK_URL,
-        metadata: {
-          discordUserId: userId,
-          ...metadata,
-        },
+        metadata,
         channels: ['card', 'bank', 'ussd', 'mobile_money'],
       },
       {
@@ -40,7 +35,7 @@ async function generatePaystackLink({ userId, amount, description, metadata }) {
 
     return res.data.data.authorization_url;
   } catch (err) {
-    console.error('❌ Failed to generate Paystack link:', err?.response?.data || err);
+    console.error('❌ Failed to generate Paystack link:', err?.response?.data || err.message);
     throw new Error('Failed to create Paystack payment link.');
   }
 }

@@ -1,8 +1,7 @@
 const { SlashCommandBuilder } = require('discord.js');
-const { Timestamp } = require('firebase-admin/firestore');
-const db = require('../../firebase');
 const { saveReference } = require('../../utils/paymentReferences');
 const { isOnCooldown, getCooldownRemaining } = require('../../utils/cooldowns');
+const generatePaystackLink = require('../../utils/generatePaystackLink');
 
 module.exports = {
   data: new SlashCommandBuilder()
@@ -11,13 +10,8 @@ module.exports = {
 
   async execute(interaction) {
     const userId = interaction.user.id;
-    const now = Date.now();
 
-    const userRef = db.collection('users').doc(userId);
-    const doc = await userRef.get();
-    const userData = doc.exists ? doc.data() : {};
-
-    // ❌ Check unified cooldown
+    // ⏳ Check cooldown
     const onCooldown = await isOnCooldown(userId);
     if (onCooldown) {
       const remaining = await getCooldownRemaining(userId);
@@ -29,15 +23,25 @@ module.exports = {
       });
     }
 
-    // 🔗 Save reference for webhook to verify
-    const reference = `bluepill_${userId}_${now}`;
-    saveReference(reference, userId, {
+    // 🧾 Generate unique reference
+    const reference = `bluepill_${userId}_${Date.now()}`;
+    await saveReference(reference, userId, {
       discordUserId: userId,
       pillType: 'blue',
       category: 'boost'
     });
 
-    const paystackLink = `https://paystack.com/buy/blue-pill-aiuyyd`;
+    // 💳 Create Paystack payment link
+    const paystackLink = await generatePaystackLink({
+      amount: 10000, // ₦100 in kobo
+      email: interaction.user.email ?? 'boost@monika.gg',
+      reference,
+      metadata: {
+        discordUserId: userId,
+        pillType: 'blue',
+        category: 'boost'
+      }
+    });
 
     await interaction.reply({
       content: `💊 Click below to buy the **Blue Pill** and enjoy **double XP** for 24 hours:\n${paystackLink}`,

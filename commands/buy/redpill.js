@@ -30,9 +30,8 @@ module.exports = {
       category: 'other'
     });
 
-    // Use a fixed default email here
     const paystackLink = await generatePaystackLink({
-      amount: 50000, // ₦500 in kobo
+      amount: 10000, // ₦100 in kobo
       email: 'buyer@monika.gg',
       reference,
       metadata: {

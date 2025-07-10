@@ -9,6 +9,12 @@ const {
 const generatePaystackLink = require('../../utils/generatePaystackLink');
 const { saveReference } = require('../../utils/paymentReferences');
 
+const VIP_PRICES = {
+  1: 1000000, // ₦10,000
+  2: 2000000, // ₦20,000
+  3: 3000000  // ₦30,000
+};
+
 module.exports = {
   data: new SlashCommandBuilder()
     .setName('upgradevip')
@@ -33,15 +39,9 @@ module.exports = {
         .setCustomId('vip-tier-select')
         .setPlaceholder('Select a VIP Tier')
         .addOptions(
-          new StringSelectMenuOptionBuilder()
-            .setLabel('VIP 1 – ₦10,000')
-            .setValue('1'),
-          new StringSelectMenuOptionBuilder()
-            .setLabel('VIP 2 – ₦20,000')
-            .setValue('2'),
-          new StringSelectMenuOptionBuilder()
-            .setLabel('VIP 3 – ₦30,000')
-            .setValue('3')
+          new StringSelectMenuOptionBuilder().setLabel('VIP 1 – ₦10,000').setValue('1'),
+          new StringSelectMenuOptionBuilder().setLabel('VIP 2 – ₦20,000').setValue('2'),
+          new StringSelectMenuOptionBuilder().setLabel('VIP 3 – ₦30,000').setValue('3')
         )
     );
 
@@ -60,9 +60,9 @@ module.exports = {
 
     collector.on('collect', async (selectInteraction) => {
       const selectedTier = selectInteraction.values[0];
-      const amount = selectedTier === '1' ? 1000000 : selectedTier === '2' ? 2000000 : 3000000;
-      const reference = `vip_${userId}_${Date.now()}`;
+      const amount = VIP_PRICES[selectedTier];
 
+      const reference = `vip_${userId}_${Date.now()}`;
       await saveReference(reference, userId, {
         discordUserId: userId,
         vipTier: selectedTier,
