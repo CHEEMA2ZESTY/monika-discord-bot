@@ -1,12 +1,13 @@
 const { SlashCommandBuilder, EmbedBuilder } = require('discord.js');
-const db = require('../firebase');
-const { FieldValue } = require('firebase-admin/firestore'); // Import FieldValue properly
+const db = require('../../firebase');  // Adjusted path assuming command is in commands/general
+const admin = require('firebase-admin');
+const FieldValue = admin.firestore.FieldValue;
 const {
   ensureUser,
   isSpinOnCooldown,
   getCooldownRemaining,
   setSpinCooldown
-} = require('../utils/spin');
+} = require('../../utils/spin');
 
 // Weighted rewards list
 const rewards = [
@@ -45,7 +46,6 @@ module.exports = {
     try {
       // Load user data or create default
       const user = await ensureUser(userId);
-      console.log(`[Spin] User ${userId} data loaded:`, user);
 
       if (!user.spinCount || user.spinCount < 1) {
         return interaction.editReply('❌ You don’t have any spins available. Buy a Red Pill to get spins!');
@@ -60,7 +60,6 @@ module.exports = {
 
       // Pick reward
       const reward = weightedRandom(rewards);
-      console.log(`[Spin] Reward picked for ${userId}:`, reward);
 
       const userRef = db.collection('users').doc(userId);
       const updateData = {
@@ -79,14 +78,13 @@ module.exports = {
           updateData.items = FieldValue.arrayUnion(reward.rewardId);
           break;
         case 'none':
-          // no extra update needed
+          // no update necessary
           break;
       }
 
       await userRef.update(updateData);
-      console.log(`[Spin] Updated user ${userId} with`, updateData);
 
-      // Build reply
+      // Build reply message
       let replyMessage;
       switch (reward.type) {
         case 'xp':
