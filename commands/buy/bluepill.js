@@ -11,15 +11,17 @@ module.exports = {
   async execute(interaction) {
     const userId = interaction.user.id;
 
+    // ⏳ Defer early to avoid interaction timeout
+    await interaction.deferReply({ ephemeral: true });
+
     // ⏳ Check cooldown
     const onCooldown = await isOnCooldown(userId);
     if (onCooldown) {
       const remaining = await getCooldownRemaining(userId);
       const hours = Math.floor(remaining / (1000 * 60 * 60));
       const minutes = Math.floor((remaining % (1000 * 60 * 60)) / (1000 * 60));
-      return interaction.reply({
-        content: `⏳ You must wait **${hours}h ${minutes}m** before buying another pill.`,
-        ephemeral: true
+      return interaction.editReply({
+        content: `⏳ You must wait **${hours}h ${minutes}m** before buying another pill.`
       });
     }
 
@@ -31,21 +33,27 @@ module.exports = {
       category: 'boost'
     });
 
-    // 💳 Create Paystack payment link
-    const paystackLink = await generatePaystackLink({
-      amount: 10000, // ₦100 in kobo
-      email: interaction.user.email ?? 'boost@monika.gg',
-      reference,
-      metadata: {
-        discordUserId: userId,
-        pillType: 'blue',
-        category: 'boost'
-      }
-    });
+    try {
+      // 💳 Create Paystack payment link
+      const paystackLink = await generatePaystackLink({
+        amount: 10000, // ₦100 in kobo
+        email: 'boost@monika.gg',
+        reference,
+        metadata: {
+          discordUserId: userId,
+          pillType: 'blue',
+          category: 'boost'
+        }
+      });
 
-    await interaction.reply({
-      content: `💊 Click below to buy the **Blue Pill** and enjoy **double XP** for 24 hours:\n${paystackLink}`,
-      ephemeral: true
-    });
+      await interaction.editReply({
+        content: `💊 Click below to buy the **Blue Pill** and enjoy **double XP** for 24 hours:\n${paystackLink}`
+      });
+    } catch (err) {
+      console.error('❌ Failed to create Paystack link:', err);
+      await interaction.editReply({
+        content: '❌ Failed to generate Paystack link. Please try again shortly.'
+      });
+    }
   }
 };

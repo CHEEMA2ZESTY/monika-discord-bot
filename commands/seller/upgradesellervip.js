@@ -4,7 +4,7 @@ const {
   ActionRowBuilder,
   StringSelectMenuBuilder,
   StringSelectMenuOptionBuilder,
-  ComponentType,
+  ComponentType
 } = require('discord.js');
 const generatePaystackLink = require('../../utils/generatePaystackLink');
 const { saveReference } = require('../../utils/paymentReferences');
@@ -22,6 +22,9 @@ module.exports = {
 
   async execute(interaction) {
     const userId = interaction.user.id;
+
+    // ⏳ Defer reply
+    await interaction.deferReply({ ephemeral: true });
 
     const embed = new EmbedBuilder()
       .setTitle('💼 Seller VIP Tiers')
@@ -64,17 +67,16 @@ module.exports = {
         )
     );
 
-    await interaction.reply({
+    await interaction.editReply({
       embeds: [embed],
-      components: [row],
-      ephemeral: true,
+      components: [row]
     });
 
     const collector = interaction.channel.createMessageComponentCollector({
       componentType: ComponentType.StringSelect,
       time: 15000,
       max: 1,
-      filter: (i) => i.user.id === userId,
+      filter: (i) => i.user.id === userId
     });
 
     collector.on('collect', async (selectInteraction) => {
@@ -88,21 +90,39 @@ module.exports = {
         category: 'sellervip'
       });
 
-      const paystackLink = await generatePaystackLink({
-        amount,
-        email: interaction.user.email ?? 'sellervip@monika.gg',
-        reference,
-        metadata: {
-          discordUserId: userId,
-          vipTier: selectedTier,
-          category: 'sellervip'
-        }
-      });
+      try {
+        const paystackLink = await generatePaystackLink({
+          amount,
+          email: 'sellervip@monika.gg',
+          reference,
+          metadata: {
+            discordUserId: userId,
+            vipTier: selectedTier,
+            category: 'sellervip'
+          }
+        });
 
-      await selectInteraction.reply({
-        content: `💠 Click below to complete your **Seller VIP ${selectedTier}** upgrade:\n${paystackLink}`,
-        ephemeral: true
-      });
+        await selectInteraction.reply({
+          content: `💠 Click below to complete your **Seller VIP ${selectedTier}** upgrade:\n${paystackLink}`,
+          ephemeral: true
+        });
+      } catch (err) {
+        console.error('❌ Failed to generate Seller VIP payment link:', err);
+        await selectInteraction.reply({
+          content: '❌ Could not generate the payment link. Please try again later.',
+          ephemeral: true
+        });
+      }
+    });
+
+    collector.on('end', async (collected) => {
+      if (collected.size === 0) {
+        await interaction.editReply({
+          content: '⚠️ You did not select a VIP tier in time. Please run the command again.',
+          embeds: [],
+          components: []
+        });
+      }
     });
   }
 };

@@ -23,6 +23,9 @@ module.exports = {
   async execute(interaction) {
     const userId = interaction.user.id;
 
+    // Defer initial reply to prevent timeout
+    await interaction.deferReply({ ephemeral: true });
+
     const embed = new EmbedBuilder()
       .setTitle('💎 VIP Upgrade Tiers')
       .setColor('#ffb700')
@@ -45,10 +48,9 @@ module.exports = {
         )
     );
 
-    await interaction.reply({
+    await interaction.editReply({
       embeds: [embed],
-      components: [row],
-      ephemeral: true
+      components: [row]
     });
 
     const collector = interaction.channel.createMessageComponentCollector({
@@ -61,29 +63,37 @@ module.exports = {
     collector.on('collect', async (selectInteraction) => {
       const selectedTier = selectInteraction.values[0];
       const amount = VIP_PRICES[selectedTier];
-
       const reference = `vip_${userId}_${Date.now()}`;
-      await saveReference(reference, userId, {
-        discordUserId: userId,
-        vipTier: selectedTier,
-        category: 'vip'
-      });
 
-      const paystackLink = await generatePaystackLink({
-        amount,
-        email: interaction.user.email ?? 'vip@monika.gg',
-        reference,
-        metadata: {
+      await selectInteraction.deferReply({ ephemeral: true });
+
+      try {
+        await saveReference(reference, userId, {
           discordUserId: userId,
           vipTier: selectedTier,
           category: 'vip'
-        }
-      });
+        });
 
-      await selectInteraction.reply({
-        content: `💠 Click below to complete your **VIP ${selectedTier}** upgrade:\n${paystackLink}`,
-        ephemeral: true
-      });
+        const paystackLink = await generatePaystackLink({
+          amount,
+          email: interaction.user.email ?? 'vip@monika.gg',
+          reference,
+          metadata: {
+            discordUserId: userId,
+            vipTier: selectedTier,
+            category: 'vip'
+          }
+        });
+
+        await selectInteraction.editReply({
+          content: `💠 Click below to complete your **VIP ${selectedTier}** upgrade:\n${paystackLink}`
+        });
+      } catch (err) {
+        console.error('🔥 Failed to generate VIP Paystack link:', err);
+        await selectInteraction.editReply({
+          content: '❌ Failed to generate payment link. Please try again shortly.'
+        });
+      }
     });
   }
 };

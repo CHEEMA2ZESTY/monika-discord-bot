@@ -1,9 +1,6 @@
-// events/paystackWebhook.js
-
 const { Timestamp, FieldValue } = require('firebase-admin/firestore');
 const db = require('../firebase');
 const config = require('../config');
-const client = require('../index').client;
 
 async function safeAddRole(member, roleId, maxRetries = 3) {
   if (!roleId) return false;
@@ -17,14 +14,14 @@ async function safeAddRole(member, roleId, maxRetries = 3) {
     } catch (err) {
       attempt++;
       console.warn(`⚠️ Failed to add role ${roleId} to ${member.id} (attempt ${attempt}):`, err);
-      await new Promise(res => setTimeout(res, 500)); // wait 0.5s before retry
+      await new Promise(res => setTimeout(res, 500));
     }
   }
   console.error(`❌ Giving up adding role ${roleId} to ${member.id} after ${maxRetries} attempts.`);
   return false;
 }
 
-module.exports = async (event) => {
+module.exports = async (event, client) => {
   try {
     if (event.event !== 'charge.success') return;
 
@@ -45,10 +42,17 @@ module.exports = async (event) => {
     const member = await guild.members.fetch(userId).catch(() => null);
     if (!member) return;
 
+    // ✅ Check and clear the reference
+    const refDoc = await db.collection('paymentReferences').doc(reference).get();
+    if (!refDoc.exists) {
+      console.warn(`🚫 Ignored unknown or reused reference: ${reference}`);
+      return;
+    }
+    await db.collection('paymentReferences').doc(reference).delete();
+
     // 🌟 Sticker Purchase
     if (metadata.type === 'sticker') {
       await safeAddRole(member, process.env.STICKER_ROLE_ID);
-
       await db.collection('users').doc(userId).set({
         stickerPurchased: true,
         stickerPurchasedAt: now
@@ -61,7 +65,7 @@ module.exports = async (event) => {
       return;
     }
 
-    // 💎 Buyer VIP Tier Purchase (vipTier in metadata)
+    // 💎 VIP (Buyer or Seller)
     if (metadata.vipTier) {
       const vipTier = parseInt(metadata.vipTier);
       const vipRoles = {
@@ -70,11 +74,12 @@ module.exports = async (event) => {
         3: process.env.VIP_ROLE_GOLD
       };
 
-      await db.collection('sellers').doc(userId).set({ vipTier }, { merge: true });
+      const collection = metadata.category === 'sellervip' ? 'sellers' : 'users';
+      await db.collection(collection).doc(userId).set({ vipTier }, { merge: true });
 
       if (vipRoles[vipTier]) {
         await safeAddRole(member, vipRoles[vipTier]);
-        console.log(`🎖 ${userId} upgraded to VIP ${vipTier}`);
+        console.log(`🎖 ${userId} upgraded to VIP ${vipTier} (${collection})`);
       }
       return;
     }
@@ -82,7 +87,6 @@ module.exports = async (event) => {
     // 💊 Pill Purchases
     const pillType = metadata.pillType;
     const category = metadata.category || 'other';
-
     const cooldownRef = db.collection('pillCooldowns').doc(userId);
 
     if (pillType === 'blue') {
@@ -110,13 +114,16 @@ module.exports = async (event) => {
       }
     }
 
-    // 📊 XP + Spend Update
+    // 📊 XP + Spend Tracking
     const xpRates = {
       account: 300,
       merch: 200,
       wdp: 50,
       other: 50,
-      boost: 150
+      boost: 150,
+      sellervip: 0,
+      vip: 0,
+      sticker: 0
     };
     const xpGain = Math.floor(amount * (xpRates[category] || 50));
 
@@ -134,6 +141,10 @@ module.exports = async (event) => {
     }, { merge: true });
 
     console.log(`🧮 ${userId} earned ${xpGain} XP and spent ₦${amount} [${category}]`);
+
+    if (!metadata.pillType && !metadata.type && !metadata.vipTier) {
+      console.warn(`⚠️ Unhandled Paystack metadata:`, metadata);
+    }
 
   } catch (err) {
     console.error('🔥 Webhook processing error:', err);
