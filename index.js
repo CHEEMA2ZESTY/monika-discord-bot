@@ -57,3 +57,6 @@ client.login(process.env.TOKEN)
     scheduleJTLDReset(client);
   })
   .catch(console.error);
+
+// ✅ Export the client so webhook can access it
+module.exports = { client };
