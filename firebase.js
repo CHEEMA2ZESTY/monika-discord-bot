@@ -1,7 +1,7 @@
 // firebase.js (place this in the root directory)
 
 const admin = require('firebase-admin');
-const serviceAccount = require('./firebaseServiceAccount.json');
+const serviceAccount = require('./config/firebaseServiceAccount.json'); // updated path
 
 admin.initializeApp({
   credential: admin.credential.cert(serviceAccount),
