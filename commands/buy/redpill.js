@@ -24,7 +24,11 @@ module.exports = {
 
     // 🔗 Save reference for webhook verification
     const reference = `redpill_${userId}_${Date.now()}`;
-    saveReference(reference, userId, 'redpill');
+    saveReference(reference, userId, {
+      discordUserId: userId,
+      pillType: 'red',
+      category: 'other'
+    });
 
     // 💳 Correct Red Pill Paystack link
     const paystackLink = `https://paystack.com/buy/red-pill-cjeozi`;

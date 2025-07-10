@@ -31,7 +31,11 @@ module.exports = {
 
     // 🔗 Save reference for webhook to verify
     const reference = `bluepill_${userId}_${now}`;
-    saveReference(reference, userId, 'bluepill');
+    saveReference(reference, userId, {
+      discordUserId: userId,
+      pillType: 'blue',
+      category: 'boost'
+    });
 
     const paystackLink = `https://paystack.com/buy/blue-pill-aiuyyd`;
 

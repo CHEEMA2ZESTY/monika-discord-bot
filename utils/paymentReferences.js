@@ -1,13 +1,18 @@
-// utils/paymentReferences.js
+const db = require('../firebase');
 
-const references = new Map(); // key: reference, value: Discord user ID
+const collection = db.collection('paymentReferences');
 
-function saveReference(reference, userId, pillType) {
-  references.set(reference, { userId, pillType });
+async function saveReference(reference, userId, pillType) {
+  await collection.doc(reference).set({
+    userId,
+    pillType,
+    timestamp: Date.now()
+  });
 }
 
-function getReferenceOwner(reference) {
-  return references.get(reference);
+async function getReferenceOwner(reference) {
+  const doc = await collection.doc(reference).get();
+  return doc.exists ? doc.data() : null;
 }
 
 module.exports = {

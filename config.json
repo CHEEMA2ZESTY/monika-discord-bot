@@ -1,11 +1,57 @@
 {
   "guildId": "1383835786079895682",
-  "bluePillRoleId": "1390016512773066895",
-  "pillLogChannelId": "1390020527443153006",
-  "redPillSpinChannelId": "1390020301089280080",
+
+  "roles": {
+    "warrior": "WARRIOR_ROLE_ID_HERE",
+    "bluePill": "1390016512773066895",
+    "vip": {
+      "1": "VIP_ROLE_1_ID",
+      "2": "VIP_ROLE_2_ID",
+      "3": "VIP_ROLE_3_ID"
+    },
+    "sellerVip": {
+      "1": "SELLER_VIP_ROLE_1_ID",
+      "2": "SELLER_VIP_ROLE_2_ID",
+      "3": "SELLER_VIP_ROLE_3_ID"
+    },
+    "verifiedSeller": "VERIFIED_SELLER_ROLE_ID",
+    "trustedMerchant": "TRUSTED_MERCHANT_ROLE_ID",
+    "boosterTiers": {
+      "1": "BOOST_ROLE_TIER1_ID",
+      "2": "BOOST_ROLE_TIER2_ID",
+      "3": "BOOST_ROLE_TIER3_ID",
+      "4": "BOOST_ROLE_TIER4_ID"
+    },
+    "sticker": "1392493659634663515"
+  },
+
+  "channels": {
+    "pillLog": "1390020527443153006",
+    "redPillSpin": "1390020301089280080",
+    "startHere": "START_HERE_CHANNEL_ID_HERE",
+    "roleSelection": "ROLE_SELECTION_CHANNEL_ID_HERE",
+    "boostLog": "BOOST_LOG_CHANNEL_ID_HERE",
+    "wheelLog": "WHEEL_LOG_CHANNEL_ID_HERE",
+    "priorityListings": "1392136362546696412",
+    "vipActivityLog": "1392136622472036403"
+  },
+
   "cooldownHours": 24,
+
   "paystackLinks": {
-    "blue": "https://paystack.com/buy/blue-pill-aiuyyd",
-    "red": "https://paystack.com/buy/red-pill-cjeozi"
+    "pills": {
+      "blue": "https://paystack.com/buy/blue-pill-aiuyyd",
+      "red": "https://paystack.com/buy/red-pill-cjeozi"
+    },
+    "vip": {
+      "1": "https://paystack.shop/pay/2f5nehabuo",
+      "2": "https://paystack.shop/pay/lfc0q8qwat",
+      "3": "https://paystack.shop/pay/7fmfyr28je"
+    },
+    "sellerVip": {
+      "1": "https://paystack.shop/pay/m77oze48u4",
+      "2": "https://paystack.shop/pay/8uxlrn76kf",
+      "3": "https://paystack.shop/pay/8hkm0n71dr"
+    }
   }
 }

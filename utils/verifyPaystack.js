@@ -2,13 +2,12 @@
 
 const crypto = require('crypto');
 
-function verifyPaystackSignature(req, secretKey) {
+function verifyPaystackSignature(rawBody, signature, secretKey) {
   const hash = crypto
     .createHmac('sha512', secretKey)
-    .update(JSON.stringify(req.body))
+    .update(rawBody)
     .digest('hex');
 
-  const signature = req.headers['x-paystack-signature'];
   return signature === hash;
 }
 

@@ -5,6 +5,7 @@ const {
   ButtonBuilder,
   ButtonStyle
 } = require('discord.js');
+const { saveReference } = require('../../utils/paymentReferences');
 
 module.exports = {
   data: new SlashCommandBuilder()
@@ -12,6 +13,17 @@ module.exports = {
     .setDescription('Support the server and unlock our exclusive sticker pack!'),
 
   async execute(interaction) {
+    const userId = interaction.user.id;
+    const reference = `sticker_${userId}_${Date.now()}`;
+
+    // Save a temporary reference to validate on webhook
+    saveReference(reference, userId, {
+      discordUserId: userId,
+      type: 'sticker'
+    });
+
+    const paystackLink = `https://paystack.com/buy/gameschill-sticker-pack-kcqhcs?reference=${reference}`;
+
     const embed = new EmbedBuilder()
       .setTitle('🌟 GGS Sticker Pack')
       .setColor('#e67e22')
@@ -29,7 +41,7 @@ module.exports = {
       new ButtonBuilder()
         .setLabel('🛒 Buy Sticker Pack – ₦1,000')
         .setStyle(ButtonStyle.Link)
-        .setURL('https://paystack.com/buy/gameschill-sticker-pack-kcqhcs')
+        .setURL(paystackLink)
     );
 
     return interaction.reply({

@@ -1,16 +1,13 @@
-const { verifyPaystackSignature } = require('../utils/verifyPaystack');
+// paystackwebhook.js
+
 const { Timestamp, FieldValue } = require('firebase-admin/firestore');
 const db = require('../firebase');
+const config = require('../config');
+const client = require('../index').client; // Make sure you export `client` from index.js
 
-module.exports = async (req, res, config, client) => {
+module.exports = async (event) => {
   try {
-    if (!verifyPaystackSignature(req, process.env.PAYSTACK_SECRET_KEY)) {
-      console.warn('❌ Invalid Paystack signature');
-      return res.status(400).send('Invalid signature');
-    }
-
-    const event = req.body;
-    if (event.event !== 'charge.success') return res.sendStatus(200);
+    if (event.event !== 'charge.success') return;
 
     const metadata = event.data.metadata || {};
     const reference = event.data.reference || '';
@@ -21,38 +18,26 @@ module.exports = async (req, res, config, client) => {
       console.error('❌ Failed to fetch guild:', err);
       return null;
     });
-    if (!guild) return res.status(500).send('Guild fetch failed');
+    if (!guild) return;
 
     // 🟣 STICKER PACK PURCHASE LOGIC
     if (reference === 'gameschill-sticker-pack-kcqhcs') {
       const customerEmail = event.data.customer?.email;
-      if (!customerEmail) {
-        console.warn('⚠️ Sticker purchase missing customer email');
-        return res.sendStatus(200);
-      }
+      if (!customerEmail) return;
 
       const snapshot = await db.collection('users')
         .where('email', '==', customerEmail)
         .limit(1)
         .get();
 
-      if (snapshot.empty) {
-        console.warn(`⚠️ No user found for email: ${customerEmail}`);
-        return res.sendStatus(200);
-      }
+      if (snapshot.empty) return;
 
       const userDoc = snapshot.docs[0];
       const userId = userDoc.id;
-      const member = await guild.members.fetch(userId).catch(err => {
-        console.error(`❌ Failed to fetch member ${userId}:`, err);
-        return null;
-      });
+      const member = await guild.members.fetch(userId).catch(() => null);
 
       if (member) {
-        await member.roles.add(process.env.STICKER_ROLE_ID).catch(err => {
-          console.error(`❌ Failed to assign sticker role to ${userId}:`, err);
-        });
-
+        await member.roles.add(process.env.STICKER_ROLE_ID).catch(() => {});
         await db.collection('users').doc(userId).set({
           stickerPurchased: true,
           stickerPurchasedAt: now
@@ -61,11 +46,9 @@ module.exports = async (req, res, config, client) => {
         client.channels.cache.get(config.pillLogChannelId)?.send(
           `🧷 <@${userId}> just purchased the **Sticker Pack** and received access!`
         );
-
-        console.log(`✅ Sticker Pack role granted to ${userId}`);
       }
 
-      return res.sendStatus(200);
+      return;
     }
 
     // 🧠 VIP UPGRADE LOGIC
@@ -73,7 +56,7 @@ module.exports = async (req, res, config, client) => {
       const [tierPart, userId] = reference.split('-');
       const vipTier = parseInt(tierPart.replace('vip', ''));
 
-      if (!userId || isNaN(vipTier)) return res.sendStatus(200);
+      if (!userId || isNaN(vipTier)) return;
 
       const sellerRef = db.collection('sellers').doc(userId);
       const sellerSnap = await sellerRef.get();
@@ -81,11 +64,7 @@ module.exports = async (req, res, config, client) => {
 
       await sellerRef.set({ ...sellerData, vipTier }, { merge: true });
 
-      const member = await guild.members.fetch(userId).catch(err => {
-        console.error(`❌ Failed to fetch member for VIP upgrade (${userId}):`, err);
-        return null;
-      });
-
+      const member = await guild.members.fetch(userId).catch(() => null);
       const tierRoles = {
         1: process.env.VIP_ROLE_BRONZE,
         2: process.env.VIP_ROLE_SILVER,
@@ -93,14 +72,11 @@ module.exports = async (req, res, config, client) => {
       };
 
       if (member && tierRoles[vipTier]) {
-        await member.roles.add(tierRoles[vipTier]).catch(err => {
-          console.error(`❌ Failed to assign VIP role to ${userId}:`, err);
-        });
-
+        await member.roles.add(tierRoles[vipTier]).catch(() => {});
         console.log(`🎖 ${userId} upgraded to VIP ${vipTier}`);
       }
 
-      return res.sendStatus(200);
+      return;
     }
 
     // 💊 PILL PURCHASE LOGIC
@@ -108,53 +84,31 @@ module.exports = async (req, res, config, client) => {
     const pillType = metadata.pillType;
     const category = metadata.category || 'other';
 
-    if (!userId || !pillType) {
-      console.warn('⚠️ Pill webhook missing userId or pillType');
-      return res.sendStatus(200);
-    }
+    if (!userId || !pillType) return;
 
-    const member = await guild.members.fetch(userId).catch(err => {
-      console.error(`❌ Could not fetch member ${userId}:`, err);
-      return null;
-    });
-
+    const member = await guild.members.fetch(userId).catch(() => null);
     const cooldownRef = db.collection('pillCooldowns').doc(userId);
-
-    if (!member) {
-      console.warn(`⚠️ User ${userId} not found in guild`);
-      return res.status(404).send('User not found');
-    }
+    if (!member) return;
 
     if (pillType === 'blue') {
-      await member.roles.add(process.env.BLUEPILL_ROLE_ID).catch(err => {
-        console.error(`❌ Could not assign Blue Pill role to ${userId}:`, err);
-      });
-
+      await member.roles.add(process.env.BLUEPILL_ROLE_ID).catch(() => {});
       await db.collection('users').doc(userId).set({
-        bluePillExpiresAt: Timestamp.fromMillis(Date.now() + 24 * 60 * 60 * 1000)
+        bluePillExpiresAt: Timestamp.fromMillis(Date.now() + 86400000)
       }, { merge: true });
-
       await cooldownRef.set({ lastUsed: Date.now() }, { merge: true });
 
       client.channels.cache.get(config.pillLogChannelId)?.send(
         `💙 <@${userId}> paid successfully and got the **Blue Pill** role!`
       );
-
-      console.log(`✅ Blue Pill granted to ${userId}`);
     }
 
     if (pillType === 'red') {
-      await member.roles.add(process.env.REDPILL_ROLE_ID).catch(err => {
-        console.error(`❌ Could not assign Red Pill role to ${userId}:`, err);
-      });
-
+      await member.roles.add(process.env.REDPILL_ROLE_ID).catch(() => {});
       await cooldownRef.set({ lastUsed: Date.now() }, { merge: true });
 
       client.channels.cache.get(config.redPillSpinChannelId)?.send(
         `❤️ <@${userId}> paid for a **Red Pill**! Time to spin the **Wheel of Fate** 🎡`
       );
-
-      console.log(`✅ Red Pill granted to ${userId}`);
     }
 
     const buyerRef = db.collection('users').doc(userId);
@@ -184,9 +138,7 @@ module.exports = async (req, res, config, client) => {
 
     console.log(`🧮 ${userId} earned ${xpGain} XP and spent ₦${amount} [${category}]`);
 
-    return res.sendStatus(200);
   } catch (err) {
     console.error('🔥 Webhook processing error:', err);
-    return res.sendStatus(500);
   }
 };

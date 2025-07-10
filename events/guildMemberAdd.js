@@ -1,10 +1,7 @@
-const fs = require("fs");
-const path = require("path");
-
-const usersPath = path.join(__dirname, "../data/users.json");
+const db = require('../firebase');
 
 module.exports = {
-  name: "guildMemberAdd",
+  name: 'guildMemberAdd',
   async execute(member, client) {
     const cachedInvites = client.inviteCache.get(member.guild.id);
     const newInvites = await member.guild.invites.fetch();
@@ -25,23 +22,19 @@ module.exports = {
     if (usedInvite && usedInvite.inviter) {
       inviterId = usedInvite.inviter.id;
 
-      let users = {};
-      if (fs.existsSync(usersPath)) {
-        users = JSON.parse(fs.readFileSync(usersPath));
-      }
+      const inviterRef = db.collection('users').doc(inviterId);
+      const inviterSnap = await inviterRef.get();
+      const inviterData = inviterSnap.exists ? inviterSnap.data() : {
+        xp: 0,
+        credits: 0,
+        lastDaily: null,
+        spinsUsed: 0
+      };
 
-      if (!users[inviterId]) {
-        users[inviterId] = {
-          xp: 0,
-          credits: 0,
-          lastDaily: null,
-          spinsUsed: 0
-        };
-      }
-
-      users[inviterId].xp += 50;
-      users[inviterId].credits += 100;
-      fs.writeFileSync(usersPath, JSON.stringify(users, null, 2));
+      await inviterRef.set({
+        xp: (inviterData.xp || 0) + 50,
+        credits: (inviterData.credits || 0) + 100
+      }, { merge: true });
 
       const logChannel = member.guild.channels.cache.get(process.env.PILL_LOG_CHANNEL_ID);
       logChannel?.send(`🎯 <@${inviterId}> invited <@${member.user.id}> — +50 XP & +100 credits!`);

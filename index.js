@@ -1,27 +1,15 @@
+// index.js
 const fs = require('fs');
 const path = require('path');
-const express = require('express');
-const bodyParser = require('body-parser');
-const { Client, GatewayIntentBits, Collection, REST, Routes } = require('discord.js');
+const { REST, Routes } = require('discord.js');
+const client = require('./bot'); // ✅ Shared client instance
 require('dotenv').config();
 
-// 📦 Firebase must be initialized before cron or webhook logic
+// 📦 Initialize Firebase
 require('./firebase');
 
-// 🧠 Initialize Discord Client
-const client = new Client({
-  intents: [
-    GatewayIntentBits.Guilds,
-    GatewayIntentBits.GuildMembers,
-    GatewayIntentBits.GuildMessages,
-    GatewayIntentBits.MessageContent
-  ]
-});
-
-client.commands = new Collection();
-const commands = [];
-
 // 📦 Load Slash Commands
+const commands = [];
 for (const folder of fs.readdirSync(path.join(__dirname, 'commands'))) {
   for (const file of fs.readdirSync(path.join(__dirname, 'commands', folder))) {
     const command = require(`./commands/${folder}/${file}`);
@@ -32,7 +20,7 @@ for (const folder of fs.readdirSync(path.join(__dirname, 'commands'))) {
   }
 }
 
-// 🧩 Load Events
+// 🧩 Load Event Handlers
 for (const file of fs.readdirSync(path.join(__dirname, 'events'))) {
   const event = require(`./events/${file}`);
   const executor = (...args) => event.execute(...args, client);
@@ -45,27 +33,14 @@ require('./utils/monthlyPriorityReset');
 require('./cron/resetBuyerMilestones');
 const { scheduleJTLDReset } = require('./utils/resetJTLDWeekly');
 
-// 🌐 Webhook Setup
-const app = express();
-const PORT = process.env.PORT || 3000;
+// 🌐 Start webhook server
+require('./web');
 
-app.use(bodyParser.json());
-
-app.post('/paystack-webhook', async (req, res) => {
-  const webhookHandler = require('./paystackwebhook');
-  await webhookHandler(req, res, process.env, client);
-});
-
-app.listen(PORT, () => {
-  console.log(`🚀 Webhook server running on port ${PORT}`);
-});
-
-// 🤖 Login Bot + Register Slash Commands + Schedule Jobs
+// 🤖 Login & Register Slash Commands
 client.login(process.env.TOKEN)
   .then(async () => {
     console.log(`✅ Logged in as ${client.user.tag}`);
 
-    // 🔄 Register Slash Commands
     const rest = new REST({ version: '10' }).setToken(process.env.TOKEN);
     try {
       console.log('🔄 Registering slash commands...');
@@ -78,7 +53,7 @@ client.login(process.env.TOKEN)
       console.error('❌ Failed to register slash commands:', err);
     }
 
-    // ⏰ Schedule Weekly JTLD Reset
+    // ⏰ Start weekly JTLD reset
     scheduleJTLDReset(client);
   })
   .catch(console.error);
