@@ -1,7 +1,7 @@
 // web.js
 const express = require('express');
 const { verifyPaystackSignature } = require('./utils/verifyPaystack');
-const handlePaystackEvent = require('./webhooks/paystackwebhook');
+const handlePaystackEvent = require('./events/paystackWebhook');
 const client = require('./bot'); // ✅ Shared client instance
 const config = require('./config');
 require('dotenv').config();
