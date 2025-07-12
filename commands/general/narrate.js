@@ -1,100 +1,116 @@
 const { SlashCommandBuilder, EmbedBuilder } = require('discord.js');
+const axios = require('axios');
 const db = require('../../firebase');
-require('dotenv').config();
+
+const DAILY_LIMITS = {
+  regular: 5,
+  staff: 10,
+  admin: Infinity
+};
+
+const SYSTEM_PROMPTS = {
+  regular: "Summarize this chat as concisely as possible. Focus on key events. Keep it short, about 3-4 bullet points. Skip fluff.",
+  staff: "Summarize this conversation with moderate detail. Include notable moments and key takeaways in a paragraph or bullet list. Use a mildly sassy tone.",
+  admin: "Summarize this entire conversation in a sassy tone like Monika from Doki Doki. Include juicy or funny moments. Highlight drama, jokes, and useful info. Be expressive, creative, and concise but rich."
+};
 
 module.exports = {
   data: new SlashCommandBuilder()
     .setName('narrate')
-    .setDescription('Monika fills you in on what you missed since your last message 🫣'),
+    .setDescription('Summarize the conversation in this channel since your last message.'),
 
   async execute(interaction) {
-    await interaction.deferReply({ ephemeral: true });
+    const userId = interaction.user.id;
+    const channel = interaction.channel;
 
-    const { member, user, guild, channel } = interaction;
-    const userId = user.id;
-    const key = `${guild.id}_${userId}`;
-    const usageRef = db.collection('narrateUsage').doc(key);
-
-    // 🧩 Role IDs
-    const ADMIN = process.env.ADMIN_ROLE_ID;
-    const MOD = process.env.MOD_ROLE_ID;
-    const STAFF = process.env.STAFF_ROLE_ID;
-
-    // 🎖️ Determine user tier
+    const member = await interaction.guild.members.fetch(userId);
     const roles = member.roles.cache;
-    const isAdmin = roles.has(ADMIN);
-    const isModOrStaff = roles.has(MOD) || roles.has(STAFF);
 
-    // 💡 Set daily limit
-    let dailyLimit = 5;
-    if (isModOrStaff) dailyLimit = 10;
-    if (isAdmin) dailyLimit = Infinity;
+    const isAdmin = roles.has(process.env.ADMIN_ROLE_ID);
+    const isMod = roles.has(process.env.MOD_ROLE_ID);
+    const isStaff = roles.has(process.env.STAFF_ROLE_ID);
 
-    // 🔢 Usage Check
-    const usageDoc = await usageRef.get();
-    const now = Date.now();
-    const today = new Date();
-    today.setHours(0, 0, 0, 0); // midnight
+    // 💬 Determine role-based level
+    let level = 'regular';
+    if (isMod || isStaff) level = 'staff';
+    if (isAdmin) level = 'admin';
 
-    let usageCount = 0;
+    // 🔒 Check usage limit (not for admins)
+    const usageRef = db.collection('narrate_usage').doc(userId);
+    const usageSnap = await usageRef.get();
+    const data = usageSnap.exists ? usageSnap.data() : {};
+    const today = new Date().toISOString().split('T')[0];
 
-    if (usageDoc.exists) {
-      const data = usageDoc.data();
-      const lastUsed = data.lastUsed || 0;
-
-      // Reset if it's a new day
-      if (lastUsed < today.getTime()) {
-        await usageRef.set({ count: 1, lastUsed: now });
-        usageCount = 1;
-      } else {
-        usageCount = data.count || 0;
-        if (usageCount >= dailyLimit) {
-          return interaction.editReply({
-            content: `🚫 Woah! You've hit your daily narrate limit (${dailyLimit}x). Come back tomorrow 💅`,
-          });
-        } else {
-          await usageRef.update({
-            count: usageCount + 1,
-            lastUsed: now
-          });
-        }
+    if (!isAdmin) {
+      if (data.date === today && data.count >= DAILY_LIMITS[level]) {
+        return interaction.reply({
+          content: `🛑 You’ve reached your daily narrate limit of **${DAILY_LIMITS[level]}**.`,
+          ephemeral: true
+        });
       }
-    } else {
-      await usageRef.set({ count: 1, lastUsed: now });
-      usageCount = 1;
     }
 
-    // 🕵️ Fetch last message timestamp
-    const tsRef = db.collection('narrateTimestamps').doc(`${guild.id}_${channel.id}_${userId}`);
-    const tsSnap = await tsRef.get();
-    const lastSeen = tsSnap.exists ? tsSnap.data().timestamp : null;
-
-    if (!lastSeen) {
-      return interaction.editReply({
-        content: `👀 I couldn't find your last message in this channel. Try chatting first so I can track you, darling.`,
-      });
-    }
-
+    // 🔍 Fetch messages since user's last message
     const messages = await channel.messages.fetch({ limit: 100 });
-    const afterLast = messages.filter(msg => msg.createdTimestamp > lastSeen && !msg.author.bot);
+    const sorted = messages.sort((a, b) => a.createdTimestamp - b.createdTimestamp);
 
-    if (afterLast.size === 0) {
-      return interaction.editReply({
-        content: `Nothing juicy happened since your last drama. Everyone’s asleep or boring 😴.`,
+    const lastMessage = sorted.filter(msg => msg.author.id === userId).last();
+    const afterTime = lastMessage?.createdTimestamp || 0;
+
+    const messagesToSummarize = sorted
+      .filter(msg => msg.createdTimestamp > afterTime && !msg.author.bot)
+      .map(msg => `${msg.author.username}: ${msg.content}`)
+      .slice(-150); // max cap for token safety
+
+    if (messagesToSummarize.length === 0) {
+      return interaction.reply({
+        content: '❌ There’s nothing to narrate since your last message.',
+        ephemeral: true
       });
     }
 
-    const summary = afterLast.map(msg => `• **${msg.author.username}**: ${msg.content}`)
-                             .slice(0, 10)
-                             .join('\n');
+    // 🧠 OpenRouter GPT Call
+    try {
+      const systemPrompt = SYSTEM_PROMPTS[level];
+      const response = await axios.post('https://openrouter.ai/api/v1/chat/completions', {
+        model: "openrouter/gpt-4o",
+        messages: [
+          { role: "system", content: systemPrompt },
+          { role: "user", content: messagesToSummarize.join('\n') }
+        ],
+        temperature: 0.7,
+        max_tokens: level === 'admin' ? 1024 : level === 'staff' ? 700 : 400
+      }, {
+        headers: {
+          'Authorization': `Bearer ${process.env.OPENROUTER_API_KEY}`,
+          'Content-Type': 'application/json'
+        }
+      });
 
-    const embed = new EmbedBuilder()
-      .setTitle('📚 Monika’s Gist Report')
-      .setDescription(`Here’s what happened while you vanished:`)
-      .addFields({ name: 'Tea ☕', value: summary || 'Honestly... it was dry.' })
-      .setColor('Fuchsia')
-      .setFooter({ text: `Narrate use: ${usageCount}/${dailyLimit}` });
+      const summary = response.data.choices[0].message.content;
 
-    return interaction.editReply({ embeds: [embed] });
+      // 📊 Track usage if not admin
+      if (!isAdmin) {
+        await usageRef.set({
+          date: today,
+          count: data.date === today ? (data.count || 0) + 1 : 1
+        }, { merge: true });
+      }
+
+      const embed = new EmbedBuilder()
+        .setTitle(`📖 Monika's Sassy Recap`)
+        .setDescription(summary)
+        .setColor('#ff69b4')
+        .setFooter({ text: `Narration level: ${level.toUpperCase()}` });
+
+      await interaction.reply({ embeds: [embed], ephemeral: true });
+
+    } catch (err) {
+      console.error('❌ OpenRouter narrate error:', err.response?.data || err);
+      return interaction.reply({
+        content: '❌ Monika got a headache trying to read all that. Try again later.',
+        ephemeral: true
+      });
+    }
   }
 };

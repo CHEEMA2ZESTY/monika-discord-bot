@@ -70,9 +70,9 @@ module.exports = {
       switch (reward.type) {
         case 'xp': {
           const amount = reward.amount || 0;
-          const { xpGained, isDouble } = await grantXp(userId, amount);
-          replyMessage = `🎉 You won **+${xpGained} XP**! Your XP has increased.` +
-                         (isDouble ? ' 💊 (Blue Pill active)' : '');
+          const { appliedXp, doubled } = await grantXp(userId, amount);
+          replyMessage = `🎉 You won **+${appliedXp} XP**! Your XP has increased.` +
+                         (doubled ? ' 💊 (Blue Pill active)' : '');
           break;
         }
 
