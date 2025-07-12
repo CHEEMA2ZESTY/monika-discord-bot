@@ -1,10 +1,10 @@
-// commands/admin/warn.js
 const {
   SlashCommandBuilder,
   PermissionFlagsBits,
   EmbedBuilder
 } = require('discord.js');
 const db = require('../../firebase');
+const admin = require('firebase-admin');
 require('dotenv').config();
 
 module.exports = {
@@ -24,7 +24,25 @@ module.exports = {
     const targetUser = interaction.options.getUser('user');
     const reason = interaction.options.getString('reason');
     const guild = interaction.guild;
-    const moderator = interaction.user;
+    const moderator = interaction.member;
+
+    // 🔐 Restrict who can use this command
+    const allowedRoles = [
+      process.env.ADMIN_ROLE_ID,
+      process.env.MOD_ROLE_ID,
+      process.env.STAFF_ROLE_ID
+    ];
+
+    const hasPermission = moderator.roles.cache.some(role =>
+      allowedRoles.includes(role.id)
+    );
+
+    if (!hasPermission) {
+      return interaction.reply({
+        content: '🚫 You do not have permission to use this command.',
+        ephemeral: true
+      });
+    }
 
     const member = await guild.members.fetch(targetUser.id).catch(() => null);
     if (!member) {
@@ -34,14 +52,8 @@ module.exports = {
       });
     }
 
-    const staffRoles = [
-      process.env.ADMIN_ROLE_ID,
-      process.env.MOD_ROLE_ID,
-      process.env.STAFF_ROLE_ID
-    ];
-
     const isStaff = member.roles.cache.some(role =>
-      staffRoles.includes(role.id)
+      allowedRoles.includes(role.id)
     );
 
     if (isStaff) {
@@ -53,18 +65,27 @@ module.exports = {
 
     const warnRef = db.collection('warnings').doc(targetUser.id);
     const warnSnap = await warnRef.get();
-    const currentWarnings = warnSnap.exists ? warnSnap.data().count || 0 : 0;
 
-    const newWarnings = currentWarnings + 1;
+    const currentWarnings = warnSnap.exists && warnSnap.data().warnings
+      ? warnSnap.data().warnings.length
+      : 0;
+
+    const newWarning = {
+      reason,
+      moderator: moderator.id,
+      timestamp: Date.now()
+    };
 
     await warnRef.set({
-      count: newWarnings,
+      warnings: admin.firestore.FieldValue.arrayUnion(newWarning),
       lastWarnedAt: Date.now(),
       lastReason: reason,
       lastModerator: moderator.id
     }, { merge: true });
 
-    const logChannel = interaction.guild.channels.cache.get(process.env.MOD_LOGS_CHANNEL_ID);
+    const newWarnings = currentWarnings + 1;
+
+    const logChannel = guild.channels.cache.get(process.env.MOD_LOGS_CHANNEL_ID);
 
     const embed = new EmbedBuilder()
       .setTitle(`⚠️ User Warned`)

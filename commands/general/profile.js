@@ -3,10 +3,9 @@ const { getRankRole } = require('../../utils/rankSystem');
 const db = require('../../firebase');
 
 const sellerVipLimits = [0, 3, 5, Infinity]; // VIP 0 → 0 listings, VIP 1 → 3, etc.
-const PILL_DURATION = 24 * 60 * 60 * 1000; // 24 hours
 
-function getRemainingTime(timestamp) {
-  const remaining = PILL_DURATION - (Date.now() - timestamp);
+function getRemainingTimeFromDate(date) {
+  const remaining = date ? date.getTime() - Date.now() : 0;
   if (remaining <= 0) return null;
   const hours = Math.floor(remaining / 3600000);
   const minutes = Math.floor((remaining % 3600000) / 60000);
@@ -52,19 +51,22 @@ module.exports = {
       const vipNames = ['Regular', 'VIP 1', 'VIP 2', 'VIP 3'];
       const vipIcons = ['🟫', '🥉', '🥈', '🥇'];
 
-      // Pills
-      const bluePillTime = userData.bluePillTimestamp || 0;
-      const redPillTime = userData.redPillTimestamp || 0;
-      const blueActive = getRemainingTime(bluePillTime);
-      const redActive = getRemainingTime(redPillTime);
+      // 💊 Pills
+      const bluePillExpiry = userData.bluePillExpiresAt?.toDate?.() || null;
+      const redPillExpiry = userData.redPillExpiresAt?.toDate?.() || null;
+
+      const blueActive = getRemainingTimeFromDate(bluePillExpiry);
+      const redActive = getRemainingTimeFromDate(redPillExpiry);
 
       const bluePillStatus = blueActive
         ? `🟦 Active • Expires in ${blueActive}`
         : '❌ Not Active';
+
       const redPillStatus = redActive
         ? `🔴 Eligible • Spin before ${redActive}`
         : '❌ Not Active';
 
+      // 🧠 Secret Roles
       const member = await interaction.guild.members.fetch(userId).catch(() => null);
       const roles = member?.roles.cache;
       const secretRoles = [];
@@ -72,6 +74,7 @@ module.exports = {
       if (roles?.has(process.env.CHOSEN_ONE_ROLE_ID)) secretRoles.push('✨ Chosen One');
       if (roles?.has(process.env.ORACLE_TOUCHED_ROLE_ID)) secretRoles.push('🧠 Oracle-Touched');
 
+      // 📦 Embed Output
       const embed = new EmbedBuilder()
         .setTitle(`🧬 ${interaction.user.username}'s Profile`)
         .setColor('#00bcd4')

@@ -61,5 +61,17 @@ module.exports = {
     } catch (err) {
       console.error(`❌ Failed to update XP for ${message.author.username}:`, err);
     }
+
+    // 🧠 Narrate timestamp tracker
+    try {
+      const narrateRef = db.collection('narrateTimestamps')
+        .doc(`${message.guildId}_${message.channelId}_${userId}`);
+
+      await narrateRef.set({
+        timestamp: message.createdTimestamp
+      }, { merge: true });
+    } catch (err) {
+      console.error('❌ Failed to update narrate timestamp:', err);
+    }
   }
 };

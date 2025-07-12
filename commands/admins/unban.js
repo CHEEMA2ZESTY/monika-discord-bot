@@ -1,22 +1,44 @@
-const { SlashCommandBuilder, PermissionFlagsBits } = require('discord.js');
+const { SlashCommandBuilder } = require('discord.js');
 
 module.exports = {
   data: new SlashCommandBuilder()
     .setName('unban')
-    .setDescription('Unban a user by ID')
+    .setDescription('Unban a user by their username#tag')
     .addStringOption(option =>
-      option.setName('userid').setDescription('ID of the user to unban').setRequired(true))
-    .setDefaultMemberPermissions(PermissionFlagsBits.BanMembers),
+      option.setName('username')
+        .setDescription('Enter the username#tag of the banned user')
+        .setRequired(true)
+    ),
 
   async execute(interaction) {
-    const userId = interaction.options.getString('userid');
+    const input = interaction.options.getString('username');
 
     try {
-      await interaction.guild.bans.remove(userId);
-      await interaction.reply({ content: `✅ User <@${userId}> has been unbanned.`, ephemeral: true });
+      const bans = await interaction.guild.bans.fetch();
+      const bannedUser = bans.find(ban => {
+        const tag = `${ban.user.username}#${ban.user.discriminator}`;
+        return tag.toLowerCase() === input.toLowerCase();
+      });
+
+      if (!bannedUser) {
+        return interaction.reply({
+          content: `❌ Could not find a banned user with tag \`${input}\``,
+          ephemeral: true,
+        });
+      }
+
+      await interaction.guild.members.unban(bannedUser.user.id);
+      return interaction.reply({
+        content: `✅ Successfully unbanned \`${input}\``,
+        ephemeral: true,
+      });
+
     } catch (err) {
-      console.error(err);
-      await interaction.reply({ content: '❌ Failed to unban. Make sure the ID is valid.', ephemeral: true });
+      console.error('Unban error:', err);
+      return interaction.reply({
+        content: '❌ Something went wrong while trying to unban the user.',
+        ephemeral: true,
+      });
     }
-  }
+  },
 };

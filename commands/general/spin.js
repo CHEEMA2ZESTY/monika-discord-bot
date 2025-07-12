@@ -26,7 +26,6 @@ const rewards = [
   { type: 'none', label: '😔 Try Again Later', weight: 8 }
 ];
 
-// Weighted selection
 function weightedRandom(rewards) {
   const totalWeight = rewards.reduce((sum, r) => sum + r.weight, 0);
   let rand = Math.random() * totalWeight;
@@ -70,14 +69,15 @@ module.exports = {
 
       switch (reward.type) {
         case 'xp': {
-          const { xpGained, isDouble } = await grantXp(userId, reward.amount);
+          const amount = reward.amount || 0;
+          const { xpGained, isDouble } = await grantXp(userId, amount);
           replyMessage = `🎉 You won **+${xpGained} XP**! Your XP has increased.` +
                          (isDouble ? ' 💊 (Blue Pill active)' : '');
           break;
         }
 
         case 'credits':
-          updateData.credits = FieldValue.increment(reward.amount);
+          updateData.credits = FieldValue.increment(reward.amount || 0);
           replyMessage = `💰 You won **${reward.label}**! Your credits have been added.`;
           break;
 
@@ -87,17 +87,22 @@ module.exports = {
           break;
 
         case 'none':
-          replyMessage = '😔 No luck this time. Try again later!';
+          replyMessage = reward.label;
           break;
       }
 
       await userRef.update(updateData);
 
+      // Refresh spin count after update
+      const updatedSnap = await userRef.get();
+      const updatedUser = updatedSnap.data();
+      const spinsLeft = updatedUser.spinCount || 0;
+
       const embed = new EmbedBuilder()
         .setTitle('🎡 Wheel of Fate Spin Result')
         .setDescription(replyMessage)
         .setColor('#00ff99')
-        .setFooter({ text: `Spins left: ${user.spinCount - 1}` });
+        .setFooter({ text: `Spins left: ${spinsLeft}` });
 
       await interaction.editReply({ embeds: [embed] });
 
