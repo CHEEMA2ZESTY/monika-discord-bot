@@ -22,7 +22,6 @@ module.exports = {
   async execute(interaction) {
     const userId = interaction.user.id;
     const channel = interaction.channel;
-
     const member = await interaction.guild.members.fetch(userId);
     const roles = member.roles.cache;
 
@@ -30,12 +29,10 @@ module.exports = {
     const isMod = roles.has(process.env.MOD_ROLE_ID);
     const isStaff = roles.has(process.env.STAFF_ROLE_ID);
 
-    // 💬 Determine role-based level
     let level = 'regular';
     if (isMod || isStaff) level = 'staff';
     if (isAdmin) level = 'admin';
 
-    // 🔒 Check usage limit (not for admins)
     const usageRef = db.collection('narrate_usage').doc(userId);
     const usageSnap = await usageRef.get();
     const data = usageSnap.exists ? usageSnap.data() : {};
@@ -50,17 +47,15 @@ module.exports = {
       }
     }
 
-    // 🔍 Fetch messages since user's last message
     const messages = await channel.messages.fetch({ limit: 100 });
     const sorted = messages.sort((a, b) => a.createdTimestamp - b.createdTimestamp);
-
     const lastMessage = sorted.filter(msg => msg.author.id === userId).last();
     const afterTime = lastMessage?.createdTimestamp || 0;
 
     const messagesToSummarize = sorted
       .filter(msg => msg.createdTimestamp > afterTime && !msg.author.bot)
       .map(msg => `${msg.author.username}: ${msg.content}`)
-      .slice(-150); // max cap for token safety
+      .slice(-150); // token-safe
 
     if (messagesToSummarize.length === 0) {
       return interaction.reply({
@@ -69,11 +64,11 @@ module.exports = {
       });
     }
 
-    // 🧠 OpenRouter GPT Call
+    // 🧠 OpenRouter GPT Call (corrected model)
     try {
       const systemPrompt = SYSTEM_PROMPTS[level];
       const response = await axios.post('https://openrouter.ai/api/v1/chat/completions', {
-        model: "openrouter/gpt-4o",
+        model: 'mistralai/mixtral-8x7b-instruct',
         messages: [
           { role: "system", content: systemPrompt },
           { role: "user", content: messagesToSummarize.join('\n') }
@@ -83,13 +78,14 @@ module.exports = {
       }, {
         headers: {
           'Authorization': `Bearer ${process.env.OPENROUTER_API_KEY}`,
-          'Content-Type': 'application/json'
+          'Content-Type': 'application/json',
+          'HTTP-Referer': 'https://discord.gg/mlbbgc',
+          'X-Title': 'Monika-DiscordBot'
         }
       });
 
       const summary = response.data.choices[0].message.content;
 
-      // 📊 Track usage if not admin
       if (!isAdmin) {
         await usageRef.set({
           date: today,
