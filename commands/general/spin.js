@@ -1,7 +1,8 @@
 const { SlashCommandBuilder, EmbedBuilder } = require('discord.js');
-const db = require('../../firebase');  // Adjusted path assuming command is in commands/general
+const db = require('../../firebase');
 const admin = require('firebase-admin');
 const FieldValue = admin.firestore.FieldValue;
+
 const {
   ensureUser,
   isSpinOnCooldown,
@@ -9,7 +10,9 @@ const {
   setSpinCooldown
 } = require('../../utils/spin');
 
-// Weighted rewards list
+const grantXp = require('../../utils/grantXp');
+
+// Weighted rewards
 const rewards = [
   { type: 'xp', amount: 100, label: '+100 XP', weight: 25 },
   { type: 'xp', amount: 300, label: '+300 XP', weight: 20 },
@@ -23,7 +26,7 @@ const rewards = [
   { type: 'none', label: '😔 Try Again Later', weight: 8 }
 ];
 
-// Function to pick a weighted random reward
+// Weighted selection
 function weightedRandom(rewards) {
   const totalWeight = rewards.reduce((sum, r) => sum + r.weight, 0);
   let rand = Math.random() * totalWeight;
@@ -31,7 +34,7 @@ function weightedRandom(rewards) {
     if (rand < reward.weight) return reward;
     rand -= reward.weight;
   }
-  return rewards[rewards.length - 1]; // fallback
+  return rewards[rewards.length - 1];
 }
 
 module.exports = {
@@ -44,62 +47,51 @@ module.exports = {
     await interaction.deferReply({ ephemeral: true });
 
     try {
-      // Load user data or create default
       const user = await ensureUser(userId);
+      const userRef = db.collection('users').doc(userId);
 
       if (!user.spinCount || user.spinCount < 1) {
         return interaction.editReply('❌ You don’t have any spins available. Buy a Red Pill to get spins!');
       }
 
-      // Check cooldown
       const onCooldown = await isSpinOnCooldown(userId);
       if (onCooldown) {
         const remaining = await getCooldownRemaining(userId);
         return interaction.editReply(`⏳ You need to wait **${remaining}** before spinning again.`);
       }
 
-      // Pick reward
       const reward = weightedRandom(rewards);
-
-      const userRef = db.collection('users').doc(userId);
       const updateData = {
         lastSpin: Date.now(),
-        spinCount: FieldValue.increment(-1),
+        spinCount: FieldValue.increment(-1)
       };
 
+      let replyMessage = '';
+
       switch (reward.type) {
-        case 'xp':
-          updateData.xp = FieldValue.increment(reward.amount);
+        case 'xp': {
+          const { xpGained, isDouble } = await grantXp(userId, reward.amount);
+          replyMessage = `🎉 You won **+${xpGained} XP**! Your XP has increased.` +
+                         (isDouble ? ' 💊 (Blue Pill active)' : '');
           break;
+        }
+
         case 'credits':
           updateData.credits = FieldValue.increment(reward.amount);
-          break;
-        case 'item':
-          updateData.items = FieldValue.arrayUnion(reward.rewardId);
-          break;
-        case 'none':
-          // no update necessary
-          break;
-      }
-
-      await userRef.update(updateData);
-
-      // Build reply message
-      let replyMessage;
-      switch (reward.type) {
-        case 'xp':
-          replyMessage = `🎉 You won **${reward.label}**! Your XP has increased.`;
-          break;
-        case 'credits':
           replyMessage = `💰 You won **${reward.label}**! Your credits have been added.`;
           break;
+
         case 'item':
+          updateData.items = FieldValue.arrayUnion(reward.rewardId);
           replyMessage = `🎁 Congratulations! You received **${reward.label}**! Check your inventory.`;
           break;
+
         case 'none':
           replyMessage = '😔 No luck this time. Try again later!';
           break;
       }
+
+      await userRef.update(updateData);
 
       const embed = new EmbedBuilder()
         .setTitle('🎡 Wheel of Fate Spin Result')

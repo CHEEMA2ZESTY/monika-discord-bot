@@ -1,4 +1,3 @@
-// utils/roleAutomation.js
 const { Timestamp, FieldValue } = require('firebase-admin/firestore');
 const db = require('../firebase');
 
@@ -35,18 +34,32 @@ module.exports = {
     }
   },
 
-  async grantVIPRole(member, userId, tier, category = 'users') {
-    const vipRoles = {
+  async grantVIPRole(member, userId, tier, category = 'users', client = null) {
+    const buyerVIPRoles = {
       1: process.env.VIP_ROLE_BRONZE,
       2: process.env.VIP_ROLE_SILVER,
       3: process.env.VIP_ROLE_GOLD
     };
 
-    const roleId = vipRoles[tier];
+    const sellerVIPRoles = {
+      1: process.env.SELLER_VIP_ROLE_BRONZE,
+      2: process.env.SELLER_VIP_ROLE_SILVER,
+      3: process.env.SELLER_VIP_ROLE_GOLD
+    };
+
+    const roleId = category === 'sellers' ? sellerVIPRoles[tier] : buyerVIPRoles[tier];
     if (roleId) await safeAddRole(member, roleId);
 
     await db.collection(category).doc(userId).set({ vipTier: tier }, { merge: true });
     console.log(`🎖 ${userId} upgraded to VIP Tier ${tier} (${category})`);
+
+    // 🔔 Log to a VIP channel if available
+    if (client) {
+      const vipLogChannel = client.channels.cache.get(process.env.VIP_LOG_CHANNEL_ID);
+      if (vipLogChannel) {
+        vipLogChannel.send(`💠 <@${userId}> just upgraded to **VIP Tier ${tier}** as a ${category === 'sellers' ? 'Seller' : 'Buyer'}!`).catch(console.error);
+      }
+    }
   },
 
   async grantBluePill(member, userId, client) {

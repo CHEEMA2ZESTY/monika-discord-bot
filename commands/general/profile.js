@@ -3,6 +3,15 @@ const { getRankRole } = require('../../utils/rankSystem');
 const db = require('../../firebase');
 
 const sellerVipLimits = [0, 3, 5, Infinity]; // VIP 0 → 0 listings, VIP 1 → 3, etc.
+const PILL_DURATION = 24 * 60 * 60 * 1000; // 24 hours
+
+function getRemainingTime(timestamp) {
+  const remaining = PILL_DURATION - (Date.now() - timestamp);
+  if (remaining <= 0) return null;
+  const hours = Math.floor(remaining / 3600000);
+  const minutes = Math.floor((remaining % 3600000) / 60000);
+  return `${hours}h ${minutes}m`;
+}
 
 module.exports = {
   data: new SlashCommandBuilder()
@@ -43,6 +52,19 @@ module.exports = {
       const vipNames = ['Regular', 'VIP 1', 'VIP 2', 'VIP 3'];
       const vipIcons = ['🟫', '🥉', '🥈', '🥇'];
 
+      // Pills
+      const bluePillTime = userData.bluePillTimestamp || 0;
+      const redPillTime = userData.redPillTimestamp || 0;
+      const blueActive = getRemainingTime(bluePillTime);
+      const redActive = getRemainingTime(redPillTime);
+
+      const bluePillStatus = blueActive
+        ? `🟦 Active • Expires in ${blueActive}`
+        : '❌ Not Active';
+      const redPillStatus = redActive
+        ? `🔴 Eligible • Spin before ${redActive}`
+        : '❌ Not Active';
+
       const member = await interaction.guild.members.fetch(userId).catch(() => null);
       const roles = member?.roles.cache;
       const secretRoles = [];
@@ -56,22 +78,29 @@ module.exports = {
         .setThumbnail(interaction.user.displayAvatarURL({ dynamic: true }))
         .setFooter({ text: 'Monika — G&C Paybot 💰' })
         .addFields(
-          { name: '📊 XP', value: `${xp} XP`, inline: true },
-          { name: '🏅 Rank', value: `<@&${rank.roleId}>`, inline: true },
-          { name: '₡ Credits', value: `${credits}`, inline: true },
-          { name: '🎡 Spins Left', value: `${spins}`, inline: true },
-          { name: '🚀 Boost Credits', value: `${boostCredits}`, inline: true },
-          { name: '📖 JTLD Chapter', value: `Chapter ${jtldChapter}`, inline: true },
-          { name: '✨ Secret Roles', value: secretRoles.length ? secretRoles.join(', ') : 'None yet', inline: false },
-          { name: '💼 Seller XP', value: `${sellerXP} XP`, inline: true },
-          { name: '🏆 Seller Rank', value: `${sellerRank}`, inline: true },
-          { name: '💳 Seller Credits (Orbs)', value: `${sellerCredits}`, inline: true },
-          { name: '🎖️ Seller VIP', value: `${vipIcons[vipTier]} ${vipNames[vipTier]}`, inline: true },
-          {
-            name: '📦 Priority Listings',
-            value: `${usedListings} used / ${vipLimit === Infinity ? '∞' : vipLimit} allowed`,
-            inline: true
-          }
+          { name: '👤 Basic Info', value: [
+            `• **XP:** ${xp}`,
+            `• **Rank:** <@&${rank.roleId}>`,
+            `• **Credits:** ₡${credits}`,
+            `• **Boost Credits:** ${boostCredits}`,
+            `• **Spins Left:** ${spins}`,
+            `• **JTLD Chapter:** ${jtldChapter}`
+          ].join('\n'), inline: false },
+
+          { name: '💊 Pill Status', value: [
+            `• Blue Pill: ${bluePillStatus}`,
+            `• Red Pill: ${redPillStatus}`
+          ].join('\n'), inline: false },
+
+          { name: '💼 Seller Stats', value: [
+            `• XP: ${sellerXP}`,
+            `• Rank: ${sellerRank}`,
+            `• Credits: ${sellerCredits}`,
+            `• VIP: ${vipIcons[vipTier]} ${vipNames[vipTier]}`,
+            `• Listings: ${usedListings} / ${vipLimit === Infinity ? '∞' : vipLimit}`
+          ].join('\n'), inline: false },
+
+          { name: '✨ Secret Roles', value: secretRoles.length ? secretRoles.join(', ') : 'None yet', inline: false }
         );
 
       return interaction.reply({ embeds: [embed], ephemeral: true });

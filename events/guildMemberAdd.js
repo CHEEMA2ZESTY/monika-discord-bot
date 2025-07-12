@@ -1,7 +1,9 @@
 const db = require('../firebase');
+const grantXp = require('../utils/grantXp');
 
 module.exports = {
   name: 'guildMemberAdd',
+
   async execute(member, client) {
     const cachedInvites = client.inviteCache.get(member.guild.id);
     const newInvites = await member.guild.invites.fetch();
@@ -19,25 +21,28 @@ module.exports = {
     client.inviteCache.set(member.guild.id, newInvites);
 
     let inviterId = null;
+
     if (usedInvite && usedInvite.inviter) {
       inviterId = usedInvite.inviter.id;
 
       const inviterRef = db.collection('users').doc(inviterId);
       const inviterSnap = await inviterRef.get();
-      const inviterData = inviterSnap.exists ? inviterSnap.data() : {
-        xp: 0,
-        credits: 0,
-        lastDaily: null,
-        spinsUsed: 0
-      };
+      const inviterData = inviterSnap.exists ? inviterSnap.data() : {};
+
+      // ✅ Give XP with Blue Pill bonus if active
+      const { xpGained, isDouble } = await grantXp(inviterId, 50);
 
       await inviterRef.set({
-        xp: (inviterData.xp || 0) + 50,
         credits: (inviterData.credits || 0) + 100
       }, { merge: true });
 
       const logChannel = member.guild.channels.cache.get(process.env.PILL_LOG_CHANNEL_ID);
-      logChannel?.send(`🎯 <@${inviterId}> invited <@${member.user.id}> — +50 XP & +100 credits!`);
+      if (logChannel) {
+        logChannel.send(
+          `🎯 <@${inviterId}> invited <@${member.user.id}> — +${xpGained} XP & +100 credits!` +
+          (isDouble ? ' 💊 (Blue Pill active)' : '')
+        );
+      }
     } else {
       console.log(`👤 ${member.user.tag} joined, but no inviter could be found.`);
     }
@@ -48,7 +53,7 @@ module.exports = {
       await member.roles.add(warriorRole).catch(console.error);
     }
 
-    // Send welcome message in Start Here channel
+    // Send welcome message
     const welcomeChannel = member.guild.channels.cache.get(process.env.START_HERE_CHANNEL_ID);
     const registrationChannel = member.guild.channels.cache.get(process.env.ROLE_SELECTION_CHANNEL_ID);
 

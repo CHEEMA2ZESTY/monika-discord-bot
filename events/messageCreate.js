@@ -1,10 +1,12 @@
 const { Collection } = require('discord.js');
 const db = require('../firebase');
+const { FieldValue } = require('firebase-admin/firestore');
 
 const cooldowns = new Collection();
 const COOLDOWN_MS = 60 * 1000; // 60 seconds
 const MIN_XP = 5;
 const MAX_XP = 15;
+const MAX_DAILY_MESSAGE_XP = 20;
 
 module.exports = {
   name: 'messageCreate',
@@ -19,18 +21,43 @@ module.exports = {
     if (lastUsed && (Date.now() - lastUsed < COOLDOWN_MS)) return;
     cooldowns.set(userId, Date.now());
 
-    // 🎯 XP gain
-    const xpGain = Math.floor(Math.random() * (MAX_XP - MIN_XP + 1)) + MIN_XP;
+    // 🌱 XP logic
+    const xpGainRaw = Math.floor(Math.random() * (MAX_XP - MIN_XP + 1)) + MIN_XP;
+
+    const userRef = db.collection('users').doc(userId);
+    const userSnap = await userRef.get();
+    const userData = userSnap.exists ? userSnap.data() : {};
+
+    const now = new Date();
+    const today = now.toISOString().split('T')[0];
+    const lastXPDate = userData.messageXPDate || '';
+    let messageCount = userData.dailyMessageCount || 0;
+
+    // 🔁 Reset daily count if it's a new day
+    if (lastXPDate !== today) {
+      messageCount = 0;
+    }
+
+    if (messageCount >= MAX_DAILY_MESSAGE_XP) {
+      return; // 🛑 Cap reached
+    }
+
+    // 💊 Check for Blue Pill bonus
+    const bluePillExpiry = userData.bluePillExpiresAt?.toDate?.() || null;
+    const bluePillActive = bluePillExpiry && bluePillExpiry > now;
+    const xpGain = bluePillActive ? xpGainRaw * 2 : xpGainRaw;
 
     try {
-      const userRef = db.collection('users').doc(userId);
-      const doc = await userRef.get();
-      const userData = doc.exists ? doc.data() : {};
+      await userRef.set({
+        xp: FieldValue.increment(xpGain),
+        messageXPDate: today,
+        dailyMessageCount: messageCount + 1
+      }, { merge: true });
 
-      const currentXP = userData.xp || 0;
-      await userRef.set({ xp: currentXP + xpGain }, { merge: true });
-
-      console.log(`${message.author.username} gained ${xpGain} XP from chatting.`);
+      console.log(
+        `${message.author.username} gained ${xpGain} XP from chatting.` +
+        (bluePillActive ? ' 💊 Blue Pill 2x XP!' : '')
+      );
     } catch (err) {
       console.error(`❌ Failed to update XP for ${message.author.username}:`, err);
     }

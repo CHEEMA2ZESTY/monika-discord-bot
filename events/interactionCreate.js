@@ -8,9 +8,9 @@ const {
   TextInputBuilder,
   TextInputStyle,
 } = require('discord.js');
-const { FieldValue } = require('firebase-admin/firestore');
 const db = require('../firebase');
 const chapters = require('../utils/jtldChapters');
+const grantXp = require('../utils/grantXp');
 
 module.exports = {
   name: Events.InteractionCreate,
@@ -28,7 +28,6 @@ module.exports = {
       } catch (error) {
         console.error('❌ Command execution error:', error);
         const errorMsg = { content: '❌ Something went wrong.', ephemeral: true };
-
         if (interaction.replied || interaction.deferred) {
           await interaction.followUp(errorMsg).catch(() => {});
         } else {
@@ -37,10 +36,10 @@ module.exports = {
       }
     }
 
-    // ✨ Modal Submit Handler (delegated to command files)
+    // ✨ Modal Submit Handler
     if (interaction.isModalSubmit()) {
       const customId = interaction.customId;
-      const command = client.commands.get('prioritylist'); // Only /prioritylist uses modal for now
+      const command = client.commands.get('prioritylist');
       if (command?.handleModalSubmit && customId === 'priorityListModal') {
         return command.handleModalSubmit(interaction);
       }
@@ -71,11 +70,12 @@ module.exports = {
       const selected = stepData.choices[choiceKey];
       if (!selected) return interaction.reply({ content: '❌ Invalid choice.', ephemeral: true });
 
-      jtldData.choices.push(selected.text);
-      jtldData.xpEarned += selected.xp;
-      jtldData.step++;
+      // ✅ Centralized XP boost logic
+      const { xpGained, isDouble } = await grantXp(userId, selected.xp);
 
-      await userRef.set({ xp: (userData.xp || 0) + selected.xp }, { merge: true });
+      jtldData.choices.push(selected.text);
+      jtldData.xpEarned += xpGained;
+      jtldData.step++;
 
       const guild = client.guilds.cache.get(process.env.GUILD_ID);
       const member = await guild?.members.fetch(userId).catch(() => null);
@@ -132,6 +132,7 @@ module.exports = {
 
         return interaction.reply({
           content: `✅ Chapter ${currentChapter} complete!\n🏆 You earned **${jtldData.xpEarned} XP**.\n` +
+            (isDouble ? '💊 Blue Pill bonus was active (2x XP)!\n' : '') +
             (unlockRoles.length ? `🎖️ You unlocked: ${unlockRoles.join(', ')}` : '') +
             `\nCome back next week for the next chapter.`,
           ephemeral: true
@@ -152,7 +153,8 @@ module.exports = {
       });
 
       return interaction.reply({
-        content: `📖 **Step ${jtldData.step + 1}**\n${nextStep.prompt}\n\n🎉 You chose: **${selected.text}**\n${selected.reply}`,
+        content: `📖 **Step ${jtldData.step + 1}**\n${nextStep.prompt}\n\n🎉 You chose: **${selected.text}**\n${selected.reply}\n` +
+          (isDouble ? '💊 Blue Pill Bonus: **2x XP!**' : ''),
         components: [row],
         ephemeral: true
       });

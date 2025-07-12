@@ -35,6 +35,7 @@ module.exports = async (event, client) => {
       console.warn(`🚫 Ignored unknown or reused reference: ${reference}`);
       return;
     }
+    const refData = refDoc.data();
     await db.collection('paymentReferences').doc(reference).delete();
 
     const category = metadata.category || 'other';
@@ -59,6 +60,17 @@ module.exports = async (event, client) => {
 
     if (pillType === 'red') {
       await grantRedPill(member, userId, client);
+    }
+
+    // 🛎️ Send private message to user after successful pill purchase
+    if (pillType && refData?.channelId) {
+      const channel = await guild.channels.fetch(refData.channelId).catch(() => null);
+      if (channel && channel.isTextBased()) {
+        channel.send({
+          content: `✅ <@${userId}> your **${pillType === 'blue' ? 'Blue Pill 💊' : 'Red Pill ❤️'}** purchase has been confirmed!\n` +
+                   `Your designated role will be awarded shortly. Thank you for your support!`,
+        }).catch(() => {});
+      }
     }
 
     // 📊 XP + Spend Tracking (Exclude pills, stickers, VIPs)

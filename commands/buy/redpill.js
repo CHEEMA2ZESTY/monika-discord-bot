@@ -10,8 +10,8 @@ module.exports = {
 
   async execute(interaction) {
     const userId = interaction.user.id;
+    const channelId = interaction.channel.id;
 
-    // Defer immediately to prevent interaction timeout
     await interaction.deferReply({ ephemeral: true });
 
     const onCooldown = await isOnCooldown(userId);
@@ -26,22 +26,21 @@ module.exports = {
     }
 
     const reference = `redpill_${userId}_${Date.now()}`;
-    await saveReference(reference, userId, {
+    const metadata = {
       discordUserId: userId,
+      channelId,
       pillType: 'red',
       category: 'other'
-    });
+    };
+
+    await saveReference(reference, userId, metadata);
 
     try {
       const paystackLink = await generatePaystackLink({
-        amount: 10000, // ₦100 in kobo
+        amount: 10000,
         email: 'buyer@monika.gg',
         reference,
-        metadata: {
-          discordUserId: userId,
-          pillType: 'red',
-          category: 'other'
-        }
+        metadata
       });
 
       await interaction.editReply({

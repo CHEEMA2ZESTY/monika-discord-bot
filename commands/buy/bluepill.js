@@ -10,11 +10,12 @@ module.exports = {
 
   async execute(interaction) {
     const userId = interaction.user.id;
+    const channelId = interaction.channel.id;
 
-    // ⏳ Defer early to avoid interaction timeout
+    // ⏳ Defer early to avoid timeout
     await interaction.deferReply({ ephemeral: true });
 
-    // ⏳ Check cooldown
+    // ⏳ Cooldown check
     const onCooldown = await isOnCooldown(userId);
     if (onCooldown) {
       const remaining = await getCooldownRemaining(userId);
@@ -25,25 +26,23 @@ module.exports = {
       });
     }
 
-    // 🧾 Generate unique reference
+    // 🧾 Generate unique reference and save it
     const reference = `bluepill_${userId}_${Date.now()}`;
-    await saveReference(reference, userId, {
+    const metadata = {
       discordUserId: userId,
+      channelId,
       pillType: 'blue',
       category: 'boost'
-    });
+    };
+
+    await saveReference(reference, userId, metadata);
 
     try {
-      // 💳 Create Paystack payment link
       const paystackLink = await generatePaystackLink({
         amount: 10000, // ₦100 in kobo
         email: 'boost@monika.gg',
         reference,
-        metadata: {
-          discordUserId: userId,
-          pillType: 'blue',
-          category: 'boost'
-        }
+        metadata
       });
 
       await interaction.editReply({

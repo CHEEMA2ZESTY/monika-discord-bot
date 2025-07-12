@@ -22,8 +22,8 @@ module.exports = {
 
   async execute(interaction) {
     const userId = interaction.user.id;
+    const channelId = interaction.channel.id;
 
-    // ⏳ Defer reply
     await interaction.deferReply({ ephemeral: true });
 
     const embed = new EmbedBuilder()
@@ -86,6 +86,7 @@ module.exports = {
 
       await saveReference(reference, userId, {
         discordUserId: userId,
+        channelId, // ✅ So we can DM the user in that same channel on webhook confirm
         vipTier: selectedTier,
         category: 'sellervip'
       });
@@ -97,6 +98,7 @@ module.exports = {
           reference,
           metadata: {
             discordUserId: userId,
+            channelId,
             vipTier: selectedTier,
             category: 'sellervip'
           }
