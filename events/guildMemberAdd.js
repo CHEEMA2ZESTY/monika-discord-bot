@@ -20,16 +20,15 @@ module.exports = {
 
     client.inviteCache.set(member.guild.id, newInvites);
 
-    let inviterId = null;
+    const inviterId = usedInvite?.inviter?.id || null;
+    const inviteCode = usedInvite?.code || 'unknown';
 
-    if (usedInvite && usedInvite.inviter) {
-      inviterId = usedInvite.inviter.id;
-
+    // 🎁 XP + Credits reward to inviter (if found)
+    if (inviterId) {
       const inviterRef = db.collection('users').doc(inviterId);
       const inviterSnap = await inviterRef.get();
       const inviterData = inviterSnap.exists ? inviterSnap.data() : {};
 
-      // ✅ Give XP with Blue Pill bonus if active
       const { xpGained, isDouble } = await grantXp(inviterId, 50);
 
       await inviterRef.set({
@@ -41,34 +40,44 @@ module.exports = {
         logChannel.send(
           `🎯 <@${inviterId}> invited <@${member.user.id}> — +${xpGained} XP & +100 credits!` +
           (isDouble ? ' 💊 (Blue Pill active)' : '')
-        );
+        ).catch(console.error);
       }
     } else {
       console.log(`👤 ${member.user.tag} joined, but no inviter could be found.`);
     }
 
-    // Assign default "Warrior" role
+    // 🥷 Assign default "Warrior" role
     const warriorRole = member.guild.roles.cache.get(process.env.WARRIOR_ROLE_ID);
     if (warriorRole) {
       await member.roles.add(warriorRole).catch(console.error);
     }
 
-    // Send welcome message
+    // 💬 Sassy welcome messages (Monika-mode)
     const welcomeChannel = member.guild.channels.cache.get(process.env.START_HERE_CHANNEL_ID);
     const registrationChannel = member.guild.channels.cache.get(process.env.ROLE_SELECTION_CHANNEL_ID);
 
+    const sassyMessages = [
+      `🎉 Look who finally joined — <@${member.user.id}>. Took you long enough.`,
+      `👀 New face alert: <@${member.user.id}>. Impress me.`,
+      `👑 <@${member.user.id}> just entered. Let’s hope they’re not basic.`,
+      `🔥 Another soul joins the game: <@${member.user.id}>. Let’s see what you’ve got.`,
+      `💅 Welcome <@${member.user.id}>. No pressure, but Monika is watching.`,
+      `🚨 A wild <@${member.user.id}> appeared. Don’t embarrass yourself.`,
+      `🎯 <@${member.user.id}> has landed. Ready to prove your worth or nah?`
+    ];
+
+    const randomWelcome = sassyMessages[Math.floor(Math.random() * sassyMessages.length)];
+
     if (welcomeChannel && registrationChannel) {
       welcomeChannel.send({
-        content: `👋 Welcome <@${member.user.id}> to **MLBB G&C Server**!\n\n` +
-          `You're currently ranked **Warrior** ⚔️ by default.\n\n` +
-          `📌 To unlock more channels, please register in ${registrationChannel} using the \`/register\` command.\n\n` +
-          `Once registered, you’ll be asked to choose one of the following paths:\n` +
-          `🔹 **Verified Seller** – Fill a short form to gain access to the **Marketplace** and **Community Chat**.\n` +
-          `🎮 **Gamer** – Instantly unlock the **Gaming Hub**.\n` +
-          `👤 Or continue as an **Elite** and vibe in the **Community Chat**.\n\n` +
-          `💠 All registered users can earn XP, level up, and enjoy progression perks!\n\n` +
-          `Let’s get started! 🫡`
-      });
+        content: `${randomWelcome}\n\n📌 To unlock more channels, head to ${registrationChannel} and use \`/register\`.\n\n` +
+          `Choose your destiny:\n` +
+          `🔹 **Verified Seller** – Get access to the **Marketplace**.\n` +
+          `🎮 **Gamer** – Unlock the **Gaming Hub**.\n` +
+          `👤 Or chill as an **Elite** in **Community Chat**.\n\n` +
+          `🏆 Earn XP, level up, and collect perks as you go.\n\n` +
+          `🧭 Invited by: ${inviterId ? `<@${inviterId}>` : 'Unknown'} (Invite Code: ${inviteCode})`
+      }).catch(console.error);
     }
 
     console.log(`✅ Assigned Warrior role and welcomed ${member.user.tag}`);
