@@ -1,31 +1,32 @@
 // web.js
 const express = require('express');
+const cors = require('cors');
+const jwt = require('jsonwebtoken');
 const { verifyPaystackSignature } = require('./utils/verifyPaystack');
 const handlePaystackEvent = require('./events/paystackWebhook');
+const db = require('./firebase'); // Firestore
 require('dotenv').config();
 
 module.exports = (client) => {
   const app = express();
   const PORT = process.env.PORT || 3000;
 
-  // Use raw body parser for Paystack webhook route
-  app.use('/paystack/webhook', express.raw({ type: 'application/json' }));
+  // Middleware
+  app.use(cors());
+  app.use(express.json());
 
+  // Paystack webhook
+  app.use('/paystack/webhook', express.raw({ type: 'application/json' }));
   app.post('/paystack/webhook', async (req, res) => {
     try {
       const rawBody = req.body;
       const signature = req.headers['x-paystack-signature'];
-
       if (!verifyPaystackSignature(rawBody, signature, process.env.PAYSTACK_SECRET_KEY)) {
         console.warn('❌ Invalid Paystack signature');
         return res.status(400).send('Invalid signature');
       }
-
       const event = JSON.parse(rawBody.toString('utf8'));
-      handlePaystackEvent(event, client).catch(err => {
-        console.error('🔥 Webhook processing error:', err);
-      });
-
+      handlePaystackEvent(event, client).catch(console.error);
       res.status(200).send('Received');
     } catch (err) {
       console.error('🔥 Webhook error:', err);
@@ -33,7 +34,78 @@ module.exports = (client) => {
     }
   });
 
+  // ✅ Auth middleware: decode JWT from Authorization header
+  function authMiddleware(req, res, next) {
+    const token = req.header('Authorization')?.split(' ')[1];
+    if (!token) return res.status(401).json({ error: 'Missing token' });
+    try {
+      req.user = jwt.verify(token, process.env.JWT_SECRET);
+      next();
+    } catch {
+      res.status(401).json({ error: 'Invalid or expired token' });
+    }
+  }
+
+  // 🔐 Public login endpoint (handles Discord OAuth exchange)
+  app.post('/api/login', async (req, res) => {
+    const { code } = req.body;
+    if (!code) return res.status(400).json({ error: 'Missing code' });
+    // Exchange code for Discord token, fetch user, check guild membership...
+    // Then generate your own JWT for dashboard access:
+    const token = jwt.sign({ id: '...', username: '...' }, process.env.JWT_SECRET, { expiresIn: '1d' });
+    res.json({ token });
+  });
+
+  // ✅ Secured endpoints below:
+  app.use('/api', authMiddleware);
+
+  // GET /api/me
+  app.get('/api/me', (req, res) => {
+    res.json(req.user);
+  });
+
+  // GET /api/dashboard
+  app.get('/api/dashboard', async (req, res) => {
+    // Replace with real Firestore queries or client.guilds cache
+    const totalGuilds = 4;
+    const activeUsers = 27;
+    const creditsSpent = 13200;
+    res.json({ totalGuilds, activeUsers, creditsSpent });
+  });
+
+  // GET /api/analytics
+  app.get('/api/analytics', async (req, res) => {
+    const totalXP = 92410;
+    const creditsPurchased = 25600;
+    const activeServers = 7;
+    res.json({ totalXP, creditsPurchased, activeServers });
+  });
+
+  // GET /api/users
+  app.get('/api/users', async (req, res) => {
+    const snapshot = await db.collection('users').get();
+    const users = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+    res.json(users);
+  });
+
+  // GET /api/guilds/:id
+  app.get('/api/guilds/:guildId', async (req, res) => {
+    const guildId = req.params.guildId;
+    // Fetch a guild’s settings from Firestore
+    const doc = await db.collection('guildSettings').doc(guildId).get();
+    if (!doc.exists) return res.status(404).json({ error: 'Guild not found' });
+    res.json(doc.data());
+  });
+
+  // POST /api/guilds/:id
+  app.post('/api/guilds/:guildId', async (req, res) => {
+    const guildId = req.params.guildId;
+    const settings = req.body; // validate shape
+    await db.collection('guildSettings').doc(guildId).set(settings, { merge: true });
+    res.json({ success: true });
+  });
+
   app.listen(PORT, () => {
-    console.log(`🌐 Webhook server running on port ${PORT}`);
+    console.log(`🌐 API server running on port ${PORT}`);
   });
 };
