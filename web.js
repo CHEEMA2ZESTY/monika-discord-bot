@@ -1,7 +1,7 @@
-// web.js
 const express = require('express');
 const cors = require('cors');
 const jwt = require('jsonwebtoken');
+const axios = require('axios');
 const { verifyPaystackSignature } = require('./utils/verifyPaystack');
 const handlePaystackEvent = require('./events/paystackWebhook');
 const db = require('./firebase'); // Firestore
@@ -12,10 +12,13 @@ module.exports = (client) => {
   const PORT = process.env.PORT || 3000;
 
   // Middleware
-  app.use(cors());
+  app.use(cors({
+    origin: ['http://localhost:5173', 'https://your-frontend-site.com'],
+    credentials: true,
+  }));
   app.use(express.json());
 
-  // Paystack webhook
+  // Paystack webhook (raw parser)
   app.use('/paystack/webhook', express.raw({ type: 'application/json' }));
   app.post('/paystack/webhook', async (req, res) => {
     try {
@@ -34,7 +37,7 @@ module.exports = (client) => {
     }
   });
 
-  // ✅ Auth middleware: decode JWT from Authorization header
+  // ✅ Auth middleware
   function authMiddleware(req, res, next) {
     const token = req.header('Authorization')?.split(' ')[1];
     if (!token) return res.status(401).json({ error: 'Missing token' });
@@ -46,34 +49,72 @@ module.exports = (client) => {
     }
   }
 
-  // 🔐 Public login endpoint (handles Discord OAuth exchange)
+  // 🔐 Discord OAuth login handler
   app.post('/api/login', async (req, res) => {
     const { code } = req.body;
     if (!code) return res.status(400).json({ error: 'Missing code' });
-    // Exchange code for Discord token, fetch user, check guild membership...
-    // Then generate your own JWT for dashboard access:
-    const token = jwt.sign({ id: '...', username: '...' }, process.env.JWT_SECRET, { expiresIn: '1d' });
-    res.json({ token });
+
+    try {
+      // Exchange code for access_token
+      const tokenResponse = await axios.post(
+        'https://discord.com/api/oauth2/token',
+        new URLSearchParams({
+          client_id: process.env.CLIENT_ID,
+          client_secret: process.env.CLIENT_SECRET,
+          grant_type: 'authorization_code',
+          code,
+          redirect_uri: process.env.REDIRECT_URI,
+        }),
+        {
+          headers: {
+            'Content-Type': 'application/x-www-form-urlencoded',
+          },
+        }
+      );
+
+      const { access_token } = tokenResponse.data;
+
+      // Fetch user info
+      const userResponse = await axios.get('https://discord.com/api/users/@me', {
+        headers: {
+          Authorization: `Bearer ${access_token}`,
+        },
+      });
+
+      const user = userResponse.data;
+
+      // Sign custom JWT for dashboard
+      const token = jwt.sign(
+        {
+          id: user.id,
+          username: user.username,
+          avatar: user.avatar,
+        },
+        process.env.JWT_SECRET,
+        { expiresIn: '1d' }
+      );
+
+      res.json({ token });
+    } catch (err) {
+      console.error('❌ OAuth login failed:', err?.response?.data || err.message);
+      res.status(500).json({ error: 'OAuth login failed' });
+    }
   });
 
-  // ✅ Secured endpoints below:
+  // ✅ Secured routes
   app.use('/api', authMiddleware);
 
-  // GET /api/me
   app.get('/api/me', (req, res) => {
     res.json(req.user);
   });
 
-  // GET /api/dashboard
   app.get('/api/dashboard', async (req, res) => {
-    // Replace with real Firestore queries or client.guilds cache
     const totalGuilds = 4;
     const activeUsers = 27;
     const creditsSpent = 13200;
     res.json({ totalGuilds, activeUsers, creditsSpent });
   });
 
-  // GET /api/analytics
   app.get('/api/analytics', async (req, res) => {
     const totalXP = 92410;
     const creditsPurchased = 25600;
@@ -81,26 +122,22 @@ module.exports = (client) => {
     res.json({ totalXP, creditsPurchased, activeServers });
   });
 
-  // GET /api/users
   app.get('/api/users', async (req, res) => {
     const snapshot = await db.collection('users').get();
     const users = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
     res.json(users);
   });
 
-  // GET /api/guilds/:id
   app.get('/api/guilds/:guildId', async (req, res) => {
     const guildId = req.params.guildId;
-    // Fetch a guild’s settings from Firestore
     const doc = await db.collection('guildSettings').doc(guildId).get();
     if (!doc.exists) return res.status(404).json({ error: 'Guild not found' });
     res.json(doc.data());
   });
 
-  // POST /api/guilds/:id
   app.post('/api/guilds/:guildId', async (req, res) => {
     const guildId = req.params.guildId;
-    const settings = req.body; // validate shape
+    const settings = req.body;
     await db.collection('guildSettings').doc(guildId).set(settings, { merge: true });
     res.json({ success: true });
   });
