@@ -9,7 +9,7 @@ require('dotenv').config();
 
 module.exports = (client) => {
   const app = express();
-  const PORT = process.env.PORT || 3000;
+  const PORT = parseInt(process.env.PORT) || 8080; // ✅ Use Railway-assigned port
 
   // ✅ CORS Configuration
   const corsOptions = {
@@ -19,14 +19,16 @@ module.exports = (client) => {
     credentials: true,
   };
 
-  app.options('*', cors(corsOptions)); // preflight requests
-  app.use(cors(corsOptions));
+  app.options('*', cors(corsOptions)); // Preflight
+  app.use(cors(corsOptions)); // Main CORS
 
-  // ✅ Body Parsers
+  // ✅ Special raw parser for Paystack route
+  app.use('/paystack/webhook', express.raw({ type: 'application/json' }));
+
+  // ✅ Normal JSON parser for everything else
   app.use(express.json());
 
-  // ✅ Raw parser for Paystack webhook only
-  app.use('/paystack/webhook', express.raw({ type: 'application/json' }));
+  // ✅ Paystack Webhook Handler
   app.post('/paystack/webhook', async (req, res) => {
     try {
       const rawBody = req.body;
@@ -35,6 +37,7 @@ module.exports = (client) => {
         console.warn('❌ Invalid Paystack signature');
         return res.status(400).send('Invalid signature');
       }
+
       const event = JSON.parse(rawBody.toString('utf8'));
       await handlePaystackEvent(event, client);
       res.status(200).send('Received');
@@ -102,7 +105,7 @@ module.exports = (client) => {
     }
   });
 
-  // ✅ Secured API Routes
+  // ✅ Secured Routes
   app.use('/api', authMiddleware);
 
   app.get('/api/me', (req, res) => {
@@ -143,8 +146,9 @@ module.exports = (client) => {
     res.json({ success: true });
   });
 
-  // ✅ Start Server
+  // ✅ Start server
   app.listen(PORT, () => {
-    console.log(`🌐 API server running on port ${PORT}`);
+    console.log(`🚀 Monika API running on port ${PORT}`);
+    console.log(`✅ CORS allowed from: ${corsOptions.origin.join(', ')}`);
   });
 };
