@@ -9,9 +9,9 @@ require('dotenv').config();
 
 module.exports = (client) => {
   const app = express();
-  const PORT = parseInt(process.env.PORT) || 8080; // ✅ Use Railway-assigned port
+  const PORT = parseInt(process.env.PORT) || 8080;
 
-  // ✅ CORS Configuration
+  // ✅ CORS should be applied FIRST
   const corsOptions = {
     origin: ['http://localhost:5173', 'https://monika-dashboard.vercel.app'],
     methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
@@ -19,13 +19,13 @@ module.exports = (client) => {
     credentials: true,
   };
 
-  app.options('*', cors(corsOptions)); // Preflight
-  app.use(cors(corsOptions)); // Main CORS
+  app.options('*', cors(corsOptions)); // Handle preflight
+  app.use(cors(corsOptions));          // Apply CORS to all requests
 
-  // ✅ Special raw parser for Paystack route
+  // ✅ Special raw parser ONLY for webhook
   app.use('/paystack/webhook', express.raw({ type: 'application/json' }));
 
-  // ✅ Normal JSON parser for everything else
+  // ✅ Use normal JSON parser for all other routes
   app.use(express.json());
 
   // ✅ Paystack Webhook Handler
@@ -33,6 +33,7 @@ module.exports = (client) => {
     try {
       const rawBody = req.body;
       const signature = req.headers['x-paystack-signature'];
+
       if (!verifyPaystackSignature(rawBody, signature, process.env.PAYSTACK_SECRET_KEY)) {
         console.warn('❌ Invalid Paystack signature');
         return res.status(400).send('Invalid signature');
@@ -47,7 +48,7 @@ module.exports = (client) => {
     }
   });
 
-  // ✅ Auth Middleware
+  // ✅ Auth middleware for JWT-protected routes
   function authMiddleware(req, res, next) {
     const token = req.header('Authorization')?.split(' ')[1];
     if (!token) return res.status(401).json({ error: 'Missing token' });
@@ -60,7 +61,7 @@ module.exports = (client) => {
     }
   }
 
-  // ✅ Discord OAuth Login
+  // ✅ Discord OAuth2 Login
   app.post('/api/login', async (req, res) => {
     const { code } = req.body;
     if (!code) return res.status(400).json({ error: 'Missing code' });
@@ -105,7 +106,7 @@ module.exports = (client) => {
     }
   });
 
-  // ✅ Secured Routes
+  // ✅ All routes below this line require authentication
   app.use('/api', authMiddleware);
 
   app.get('/api/me', (req, res) => {
