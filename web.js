@@ -11,24 +11,23 @@ module.exports = (client) => {
   const app = express();
   const PORT = parseInt(process.env.PORT) || 8080;
 
-  // ✅ CORS should be applied FIRST
+  // ✅ CORS first (must be above all routes)
   const corsOptions = {
     origin: ['http://localhost:5173', 'https://monika-dashboard.vercel.app'],
     methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
     allowedHeaders: ['Content-Type', 'Authorization'],
     credentials: true,
   };
+  app.options('*', cors(corsOptions));
+  app.use(cors(corsOptions));
 
-  app.options('*', cors(corsOptions)); // Handle preflight
-  app.use(cors(corsOptions));          // Apply CORS to all requests
-
-  // ✅ Special raw parser ONLY for webhook
+  // ✅ Raw body parser only for webhook route
   app.use('/paystack/webhook', express.raw({ type: 'application/json' }));
 
-  // ✅ Use normal JSON parser for all other routes
+  // ✅ Regular JSON parser for all other routes
   app.use(express.json());
 
-  // ✅ Paystack Webhook Handler
+  // ✅ Paystack webhook handler
   app.post('/paystack/webhook', async (req, res) => {
     try {
       const rawBody = req.body;
@@ -48,7 +47,7 @@ module.exports = (client) => {
     }
   });
 
-  // ✅ Auth middleware for JWT-protected routes
+  // ✅ JWT auth middleware
   function authMiddleware(req, res, next) {
     const token = req.header('Authorization')?.split(' ')[1];
     if (!token) return res.status(401).json({ error: 'Missing token' });
@@ -61,7 +60,7 @@ module.exports = (client) => {
     }
   }
 
-  // ✅ Discord OAuth2 Login
+  // ✅ Discord OAuth login
   app.post('/api/login', async (req, res) => {
     const { code } = req.body;
     if (!code) return res.status(400).json({ error: 'Missing code' });
@@ -76,9 +75,7 @@ module.exports = (client) => {
           code,
           redirect_uri: process.env.REDIRECT_URI,
         }),
-        {
-          headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-        }
+        { headers: { 'Content-Type': 'application/x-www-form-urlencoded' } }
       );
 
       const { access_token } = tokenResponse.data;
@@ -106,7 +103,7 @@ module.exports = (client) => {
     }
   });
 
-  // ✅ All routes below this line require authentication
+  // ✅ Protected API routes
   app.use('/api', authMiddleware);
 
   app.get('/api/me', (req, res) => {
@@ -147,7 +144,7 @@ module.exports = (client) => {
     res.json({ success: true });
   });
 
-  // ✅ Start server
+  // ✅ Start the server
   app.listen(PORT, () => {
     console.log(`🚀 Monika API running on port ${PORT}`);
     console.log(`✅ CORS allowed from: ${corsOptions.origin.join(', ')}`);
