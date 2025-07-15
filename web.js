@@ -11,30 +11,31 @@ module.exports = (client) => {
   const app = express();
   const PORT = parseInt(process.env.PORT) || 8080;
 
-  // ✅ CORS first (must be above all routes)
+  // ✅ CORS OPTIONS – allow Vercel + Localhost
   const corsOptions = {
     origin: ['http://localhost:5173', 'https://monika-dashboard.vercel.app'],
     methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
     allowedHeaders: ['Content-Type', 'Authorization'],
     credentials: true,
   };
-  app.options('*', cors(corsOptions));
-  app.use(cors(corsOptions));
 
-  // ✅ Raw body parser only for webhook route
+  // ✅ Apply CORS BEFORE any route
+  app.use(cors(corsOptions));
+  app.options('*', cors(corsOptions));
+
+  // ✅ Special raw parser ONLY for webhook
   app.use('/paystack/webhook', express.raw({ type: 'application/json' }));
 
-  // ✅ Regular JSON parser for all other routes
+  // ✅ Normal parser
   app.use(express.json());
 
-  // ✅ Paystack webhook handler
+  // ✅ Paystack webhook
   app.post('/paystack/webhook', async (req, res) => {
     try {
       const rawBody = req.body;
       const signature = req.headers['x-paystack-signature'];
 
       if (!verifyPaystackSignature(rawBody, signature, process.env.PAYSTACK_SECRET_KEY)) {
-        console.warn('❌ Invalid Paystack signature');
         return res.status(400).send('Invalid signature');
       }
 
@@ -47,20 +48,7 @@ module.exports = (client) => {
     }
   });
 
-  // ✅ JWT auth middleware
-  function authMiddleware(req, res, next) {
-    const token = req.header('Authorization')?.split(' ')[1];
-    if (!token) return res.status(401).json({ error: 'Missing token' });
-
-    try {
-      req.user = jwt.verify(token, process.env.JWT_SECRET);
-      next();
-    } catch {
-      res.status(401).json({ error: 'Invalid or expired token' });
-    }
-  }
-
-  // ✅ Discord OAuth login
+  // ✅ OAuth2 Login
   app.post('/api/login', async (req, res) => {
     const { code } = req.body;
     if (!code) return res.status(400).json({ error: 'Missing code' });
@@ -75,7 +63,9 @@ module.exports = (client) => {
           code,
           redirect_uri: process.env.REDIRECT_URI,
         }),
-        { headers: { 'Content-Type': 'application/x-www-form-urlencoded' } }
+        {
+          headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        }
       );
 
       const { access_token } = tokenResponse.data;
@@ -103,7 +93,20 @@ module.exports = (client) => {
     }
   });
 
-  // ✅ Protected API routes
+  // ✅ Auth middleware
+  function authMiddleware(req, res, next) {
+    const token = req.header('Authorization')?.split(' ')[1];
+    if (!token) return res.status(401).json({ error: 'Missing token' });
+
+    try {
+      req.user = jwt.verify(token, process.env.JWT_SECRET);
+      next();
+    } catch {
+      res.status(401).json({ error: 'Invalid or expired token' });
+    }
+  }
+
+  // ✅ Protected routes
   app.use('/api', authMiddleware);
 
   app.get('/api/me', (req, res) => {
@@ -144,7 +147,7 @@ module.exports = (client) => {
     res.json({ success: true });
   });
 
-  // ✅ Start the server
+  // ✅ Start
   app.listen(PORT, () => {
     console.log(`🚀 Monika API running on port ${PORT}`);
     console.log(`✅ CORS allowed from: ${corsOptions.origin.join(', ')}`);
