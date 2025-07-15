@@ -11,19 +11,21 @@ module.exports = (client) => {
   const app = express();
   const PORT = process.env.PORT || 3000;
 
-  // ✅ CORS middleware FIRST
-  app.use(cors({
-    origin: ['http://localhost:5173', 'https://your-frontend-site.com'],
+  // ✅ CORS Configuration
+  const corsOptions = {
+    origin: ['http://localhost:5173', 'https://monika-dashboard.vercel.app'],
+    methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+    allowedHeaders: ['Content-Type', 'Authorization'],
     credentials: true,
-  }));
+  };
 
-  // ✅ Handle CORS preflight OPTIONS requests
-  app.options('*', cors());
+  app.options('*', cors(corsOptions)); // preflight requests
+  app.use(cors(corsOptions));
 
-  // ✅ JSON parser (after CORS)
+  // ✅ Body Parsers
   app.use(express.json());
 
-  // ✅ Paystack webhook (raw body parsing)
+  // ✅ Raw parser for Paystack webhook only
   app.use('/paystack/webhook', express.raw({ type: 'application/json' }));
   app.post('/paystack/webhook', async (req, res) => {
     try {
@@ -42,10 +44,11 @@ module.exports = (client) => {
     }
   });
 
-  // ✅ Auth middleware for protected routes
+  // ✅ Auth Middleware
   function authMiddleware(req, res, next) {
     const token = req.header('Authorization')?.split(' ')[1];
     if (!token) return res.status(401).json({ error: 'Missing token' });
+
     try {
       req.user = jwt.verify(token, process.env.JWT_SECRET);
       next();
@@ -54,7 +57,7 @@ module.exports = (client) => {
     }
   }
 
-  // ✅ OAuth Login Handler (POST /api/login)
+  // ✅ Discord OAuth Login
   app.post('/api/login', async (req, res) => {
     const { code } = req.body;
     if (!code) return res.status(400).json({ error: 'Missing code' });
@@ -70,18 +73,14 @@ module.exports = (client) => {
           redirect_uri: process.env.REDIRECT_URI,
         }),
         {
-          headers: {
-            'Content-Type': 'application/x-www-form-urlencoded',
-          },
+          headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
         }
       );
 
       const { access_token } = tokenResponse.data;
 
       const userResponse = await axios.get('https://discord.com/api/users/@me', {
-        headers: {
-          Authorization: `Bearer ${access_token}`,
-        },
+        headers: { Authorization: `Bearer ${access_token}` },
       });
 
       const user = userResponse.data;
@@ -103,7 +102,7 @@ module.exports = (client) => {
     }
   });
 
-  // ✅ Protected Routes
+  // ✅ Secured API Routes
   app.use('/api', authMiddleware);
 
   app.get('/api/me', (req, res) => {
@@ -144,7 +143,7 @@ module.exports = (client) => {
     res.json({ success: true });
   });
 
-  // ✅ Start server
+  // ✅ Start Server
   app.listen(PORT, () => {
     console.log(`🌐 API server running on port ${PORT}`);
   });
