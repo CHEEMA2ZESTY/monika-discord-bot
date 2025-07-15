@@ -11,7 +11,7 @@ module.exports = (client) => {
   const app = express();
   const PORT = parseInt(process.env.PORT) || 8080;
 
-  // ✅ CORS OPTIONS – allow Vercel + Localhost
+  // ✅ CORS setup
   const corsOptions = {
     origin: ['http://localhost:5173', 'https://monika-dashboard.vercel.app'],
     methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
@@ -19,23 +19,23 @@ module.exports = (client) => {
     credentials: true,
   };
 
-  // ✅ Apply CORS BEFORE any route
-  app.use(cors(corsOptions));
-  app.options('*', cors(corsOptions));
+  app.options('*', cors(corsOptions)); // Preflight
+  app.use(cors(corsOptions));          // Enable CORS globally
 
-  // ✅ Special raw parser ONLY for webhook
+  // ✅ Use raw body ONLY for webhook (required by Paystack signature check)
   app.use('/paystack/webhook', express.raw({ type: 'application/json' }));
 
-  // ✅ Normal parser
+  // ✅ Use JSON parser for all other routes
   app.use(express.json());
 
-  // ✅ Paystack webhook
+  // ✅ Paystack Webhook
   app.post('/paystack/webhook', async (req, res) => {
     try {
-      const rawBody = req.body;
       const signature = req.headers['x-paystack-signature'];
+      const rawBody = req.body;
 
       if (!verifyPaystackSignature(rawBody, signature, process.env.PAYSTACK_SECRET_KEY)) {
+        console.warn('❌ Invalid Paystack signature');
         return res.status(400).send('Invalid signature');
       }
 
@@ -48,7 +48,7 @@ module.exports = (client) => {
     }
   });
 
-  // ✅ OAuth2 Login
+  // ✅ OAuth2 Login Route
   app.post('/api/login', async (req, res) => {
     const { code } = req.body;
     if (!code) return res.status(400).json({ error: 'Missing code' });
@@ -93,7 +93,7 @@ module.exports = (client) => {
     }
   });
 
-  // ✅ Auth middleware
+  // ✅ Auth Middleware
   function authMiddleware(req, res, next) {
     const token = req.header('Authorization')?.split(' ')[1];
     if (!token) return res.status(401).json({ error: 'Missing token' });
@@ -106,7 +106,7 @@ module.exports = (client) => {
     }
   }
 
-  // ✅ Protected routes
+  // ✅ Protected API routes
   app.use('/api', authMiddleware);
 
   app.get('/api/me', (req, res) => {
@@ -147,7 +147,7 @@ module.exports = (client) => {
     res.json({ success: true });
   });
 
-  // ✅ Start
+  // ✅ Start the server
   app.listen(PORT, () => {
     console.log(`🚀 Monika API running on port ${PORT}`);
     console.log(`✅ CORS allowed from: ${corsOptions.origin.join(', ')}`);

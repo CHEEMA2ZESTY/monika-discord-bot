@@ -5,6 +5,9 @@ const { REST, Routes } = require('discord.js');
 const client = require('./bot');
 require('./firebase');
 
+// ✅ Start Web Server First (CORS + OAuth + API)
+require('./web')(client);
+
 // ✅ Environment check
 if (!process.env.TOKEN || !process.env.CLIENT_ID || !process.env.GUILD_ID) {
   throw new Error('❌ Missing environment variables in .env file');
@@ -57,10 +60,6 @@ client.login(process.env.TOKEN).then(async () => {
   require('./cron/resetBuyerMilestones');
   const { scheduleJTLDReset } = require('./utils/resetJTLDWeekly');
   scheduleJTLDReset(client);
-
-  // 🌐 Webhook Server
-  require('./web')(client);
-
 }).catch((err) => {
   console.error('❌ Bot failed to login:', err);
 });
