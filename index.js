@@ -5,39 +5,42 @@ const { REST, Routes } = require('discord.js');
 const client = require('./bot');
 require('./firebase');
 
-// 🛠️ Debug Express route registration to find malformed paths (MUST be above `require('./web')`)
+// 🛠️ Debug malformed Express paths before web.js loads
 const express = require('express');
-const originalAppUse = express.application.use;
-const originalAppGet = express.application.get;
-const originalAppPost = express.application.post;
+const originalUse = express.application.use;
+const originalGet = express.application.get;
+const originalPost = express.application.post;
 
 express.application.use = function (...args) {
-  console.log('🧩 app.use():', args.map(a => (typeof a === 'string' ? a : '[Function]')).join(', '));
-  return originalAppUse.apply(this, args);
+  const path = typeof args[0] === 'string' ? args[0] : '[Middleware]';
+  console.log('🧩 app.use() ->', path);
+  return originalUse.apply(this, args);
 };
 
 express.application.get = function (...args) {
-  console.log('📥 app.get():', args.map(a => (typeof a === 'string' ? a : '[Function]')).join(', '));
-  return originalAppGet.apply(this, args);
+  const path = typeof args[0] === 'string' ? args[0] : '[Middleware]';
+  console.log('📥 app.get() ->', path);
+  return originalGet.apply(this, args);
 };
 
 express.application.post = function (...args) {
-  console.log('📤 app.post():', args.map(a => (typeof a === 'string' ? a : '[Function]')).join(', '));
-  return originalAppPost.apply(this, args);
+  const path = typeof args[0] === 'string' ? args[0] : '[Middleware]';
+  console.log('📤 app.post() ->', path);
+  return originalPost.apply(this, args);
 };
 
-// ✅ Start Web Server First (CORS + OAuth + API)
+// ✅ Start Express API Server
 require('./web')(client);
 
-// ✅ Environment check
+// ✅ Environment Variable Check
 if (!process.env.TOKEN || !process.env.CLIENT_ID || !process.env.GUILD_ID) {
-  throw new Error('❌ Missing environment variables in .env file');
+  throw new Error('❌ Missing required environment variables in .env');
 }
 
-// 🧠 Command Loader
+// 🧠 Load Slash Commands
 const commands = [];
-
 const commandsPath = path.join(__dirname, 'commands');
+
 for (const folder of fs.readdirSync(commandsPath)) {
   const folderPath = path.join(commandsPath, folder);
   for (const file of fs.readdirSync(folderPath).filter(f => f.endsWith('.js'))) {
@@ -50,8 +53,9 @@ for (const folder of fs.readdirSync(commandsPath)) {
 }
 console.log(`✅ Loaded ${commands.length} slash commands.`);
 
-// 🎧 Event Loader
+// 🎧 Load Events
 const eventsPath = path.join(__dirname, 'events');
+
 for (const file of fs.readdirSync(eventsPath).filter(f => f.endsWith('.js'))) {
   const event = require(`./events/${file}`);
   const bind = (...args) => event.execute(...args, client);
@@ -59,11 +63,12 @@ for (const file of fs.readdirSync(eventsPath).filter(f => f.endsWith('.js'))) {
 }
 console.log(`✅ Loaded ${fs.readdirSync(eventsPath).length} events.`);
 
-// 🤖 Bot Login & Register Slash Commands
+// 🤖 Bot Login + Register Slash Commands
 client.login(process.env.TOKEN).then(async () => {
   console.log(`✅ Logged in as ${client.user.tag}`);
 
   const rest = new REST({ version: '10' }).setToken(process.env.TOKEN);
+
   try {
     console.log('🔄 Registering slash commands...');
     await rest.put(
@@ -75,12 +80,13 @@ client.login(process.env.TOKEN).then(async () => {
     console.error('❌ Failed to register slash commands:', err);
   }
 
-  // 🔁 Start Schedulers (after login)
+  // 🔁 Start Cron Jobs
   require('./utils/monthlySellerCreditScheduler');
   require('./utils/monthlyPriorityReset');
   require('./cron/resetBuyerMilestones');
   const { scheduleJTLDReset } = require('./utils/resetJTLDWeekly');
   scheduleJTLDReset(client);
+
 }).catch((err) => {
   console.error('❌ Bot failed to login:', err);
 });
