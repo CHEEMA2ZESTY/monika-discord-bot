@@ -7,6 +7,27 @@ require('./firebase');
 
 // ✅ Start Web Server First (CORS + OAuth + API)
 require('./web')(client);
+// 🔍 Debug Express route registration to find malformed paths
+const express = require('express');
+const originalAppUse = express.application.use;
+const originalAppGet = express.application.get;
+const originalAppPost = express.application.post;
+
+express.application.use = function (...args) {
+  console.log('🧩 app.use():', args.map(a => (typeof a === 'string' ? a : '[Function]')).join(', '));
+  return originalAppUse.apply(this, args);
+};
+
+express.application.get = function (...args) {
+  console.log('📥 app.get():', args.map(a => (typeof a === 'string' ? a : '[Function]')).join(', '));
+  return originalAppGet.apply(this, args);
+};
+
+express.application.post = function (...args) {
+  console.log('📤 app.post():', args.map(a => (typeof a === 'string' ? a : '[Function]')).join(', '));
+  return originalAppPost.apply(this, args);
+};
+
 
 // ✅ Environment check
 if (!process.env.TOKEN || !process.env.CLIENT_ID || !process.env.GUILD_ID) {
