@@ -5,9 +5,7 @@ const { REST, Routes } = require('discord.js');
 const client = require('./bot');
 require('./firebase');
 
-// ✅ Start Web Server First (CORS + OAuth + API)
-require('./web')(client);
-// 🔍 Debug Express route registration to find malformed paths
+// 🛠️ Debug Express route registration to find malformed paths (MUST be above `require('./web')`)
 const express = require('express');
 const originalAppUse = express.application.use;
 const originalAppGet = express.application.get;
@@ -28,6 +26,8 @@ express.application.post = function (...args) {
   return originalAppPost.apply(this, args);
 };
 
+// ✅ Start Web Server First (CORS + OAuth + API)
+require('./web')(client);
 
 // ✅ Environment check
 if (!process.env.TOKEN || !process.env.CLIENT_ID || !process.env.GUILD_ID) {
