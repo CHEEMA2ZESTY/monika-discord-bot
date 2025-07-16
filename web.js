@@ -31,7 +31,7 @@ module.exports = (client) => {
 
   // ✅ Rate limiting
   const apiLimiter = rateLimit({
-    windowMs: 15 * 60 * 1000, // 15 mins
+    windowMs: 15 * 60 * 1000,
     max: 100,
     message: 'Too many requests, please try again later.',
   });
@@ -86,7 +86,6 @@ module.exports = (client) => {
 
       const user = userResponse.data;
 
-      // Tokens
       const accessToken = jwt.sign(
         { id: user.id, username: user.username, avatar: user.avatar },
         process.env.JWT_SECRET,
@@ -99,12 +98,11 @@ module.exports = (client) => {
         { expiresIn: REFRESH_TOKEN_EXPIRES }
       );
 
-      // Set refreshToken as HttpOnly cookie
       res.cookie('refreshToken', refreshToken, {
         httpOnly: true,
         secure: true,
         sameSite: 'none',
-        maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
+        maxAge: 7 * 24 * 60 * 60 * 1000,
       });
 
       res.json({ accessToken });
@@ -121,13 +119,11 @@ module.exports = (client) => {
 
     try {
       const payload = jwt.verify(token, process.env.JWT_SECRET);
-
       const newAccessToken = jwt.sign(
         { id: payload.id },
         process.env.JWT_SECRET,
         { expiresIn: ACCESS_TOKEN_EXPIRES }
       );
-
       res.json({ accessToken: newAccessToken });
     } catch {
       res.status(401).json({ error: 'Invalid refresh token' });
@@ -144,7 +140,16 @@ module.exports = (client) => {
     res.json({ success: true });
   });
 
-  // ✅ Auth middleware (access token)
+  // ✅ Public API routes (no auth)
+  app.get('/api/dashboard', async (req, res) => {
+    res.json({ totalGuilds: 4, activeUsers: 27, creditsSpent: 13200 });
+  });
+
+  app.get('/api/analytics', async (req, res) => {
+    res.json({ totalXP: 92410, creditsPurchased: 25600, activeServers: 7 });
+  });
+
+  // ✅ Auth middleware
   function authMiddleware(req, res, next) {
     const token = req.header('Authorization')?.split(' ')[1];
     if (!token) return res.status(401).json({ error: 'Missing token' });
@@ -157,38 +162,34 @@ module.exports = (client) => {
     }
   }
 
-  // ✅ Secure endpoints
-  app.use('/api', authMiddleware);
+  // ✅ Secure API router
+  const secureApi = express.Router();
+  secureApi.use(authMiddleware);
 
-  app.get('/api/me', (req, res) => {
+  secureApi.get('/me', (req, res) => {
     res.json(req.user);
   });
 
-  app.get('/api/dashboard', async (req, res) => {
-    res.json({ totalGuilds: 4, activeUsers: 27, creditsSpent: 13200 });
-  });
-
-  app.get('/api/analytics', async (req, res) => {
-    res.json({ totalXP: 92410, creditsPurchased: 25600, activeServers: 7 });
-  });
-
-  app.get('/api/users', async (req, res) => {
+  secureApi.get('/users', async (req, res) => {
     const snapshot = await db.collection('users').get();
     const users = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
     res.json(users);
   });
 
-  app.get('/api/guilds/:guildId', async (req, res) => {
+  secureApi.get('/guilds/:guildId', async (req, res) => {
     const doc = await db.collection('guildSettings').doc(req.params.guildId).get();
     if (!doc.exists) return res.status(404).json({ error: 'Guild not found' });
     res.json(doc.data());
   });
 
-  app.post('/api/guilds/:guildId', async (req, res) => {
+  secureApi.post('/guilds/:guildId', async (req, res) => {
     await db.collection('guildSettings').doc(req.params.guildId).set(req.body, { merge: true });
     res.json({ success: true });
   });
 
+  app.use('/api', secureApi);
+
+  // ✅ Start server
   app.listen(PORT, () => {
     console.log(`🚀 Monika API running on port ${PORT}`);
     console.log(`✅ CORS allowed from: ${corsOptions.origin.join(', ')}`);
@@ -204,5 +205,4 @@ module.exports = (client) => {
         console.log(`➡️  [${methods}] ${r.route.path}`);
       });
   });
-}; // 👈 Ensure this closing brace exists (for module.exports = (client) => {...})
-
+};
