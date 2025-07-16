@@ -192,5 +192,17 @@ module.exports = (client) => {
   app.listen(PORT, () => {
     console.log(`🚀 Monika API running on port ${PORT}`);
     console.log(`✅ CORS allowed from: ${corsOptions.origin.join(', ')}`);
+
+    // 🐛 Debug route paths
+    console.log(`🔍 Registered API Routes:`);
+    app._router.stack
+      .filter((r) => r.route && r.route.path)
+      .forEach((r) => {
+        const methods = Object.keys(r.route.methods)
+          .map((m) => m.toUpperCase())
+          .join(', ');
+        console.log(`➡️  [${methods}] ${r.route.path}`);
+      });
   });
-};
+}; // 👈 Ensure this closing brace exists (for module.exports = (client) => {...})
+
