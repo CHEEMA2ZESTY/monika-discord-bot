@@ -2,33 +2,43 @@ const express = require('express');
 const cors = require('cors');
 const jwt = require('jsonwebtoken');
 const axios = require('axios');
+const cookieParser = require('cookie-parser');
+const rateLimit = require('express-rate-limit');
 const { verifyPaystackSignature } = require('./utils/verifyPaystack');
 const handlePaystackEvent = require('./events/paystackWebhook');
 const db = require('./firebase');
 require('dotenv').config();
 
+// JWT expiry times
+const ACCESS_TOKEN_EXPIRES = '15m';
+const REFRESH_TOKEN_EXPIRES = '7d';
+
 module.exports = (client) => {
   const app = express();
   const PORT = parseInt(process.env.PORT) || 8080;
 
-  // ✅ CORS setup
+  // ✅ CORS config
   const corsOptions = {
     origin: ['http://localhost:5173', 'https://monika-dashboard.vercel.app'],
     methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
     allowedHeaders: ['Content-Type', 'Authorization'],
     credentials: true,
   };
-
-  app.options('*', cors(corsOptions)); // Preflight
-  app.use(cors(corsOptions));          // Enable CORS globally
-
-  // ✅ Use raw body ONLY for webhook (required by Paystack signature check)
-  app.use('/paystack/webhook', express.raw({ type: 'application/json' }));
-
-  // ✅ Use JSON parser for all other routes
+  app.use(cors(corsOptions));
+  app.use(cookieParser());
   app.use(express.json());
+  app.options('*', cors(corsOptions));
 
-  // ✅ Paystack Webhook
+  // ✅ Rate limiting
+  const apiLimiter = rateLimit({
+    windowMs: 15 * 60 * 1000, // 15 mins
+    max: 100,
+    message: 'Too many requests, please try again later.',
+  });
+  app.use('/api/', apiLimiter);
+
+  // ✅ Webhook (raw body)
+  app.use('/paystack/webhook', express.raw({ type: 'application/json' }));
   app.post('/paystack/webhook', async (req, res) => {
     try {
       const signature = req.headers['x-paystack-signature'];
@@ -48,7 +58,7 @@ module.exports = (client) => {
     }
   });
 
-  // ✅ OAuth2 Login Route
+  // ✅ Login Route
   app.post('/api/login', async (req, res) => {
     const { code } = req.body;
     if (!code) return res.status(400).json({ error: 'Missing code' });
@@ -76,24 +86,65 @@ module.exports = (client) => {
 
       const user = userResponse.data;
 
-      const token = jwt.sign(
-        {
-          id: user.id,
-          username: user.username,
-          avatar: user.avatar,
-        },
+      // Tokens
+      const accessToken = jwt.sign(
+        { id: user.id, username: user.username, avatar: user.avatar },
         process.env.JWT_SECRET,
-        { expiresIn: '1d' }
+        { expiresIn: ACCESS_TOKEN_EXPIRES }
       );
 
-      res.json({ token });
+      const refreshToken = jwt.sign(
+        { id: user.id },
+        process.env.JWT_SECRET,
+        { expiresIn: REFRESH_TOKEN_EXPIRES }
+      );
+
+      // Set refreshToken as HttpOnly cookie
+      res.cookie('refreshToken', refreshToken, {
+        httpOnly: true,
+        secure: true,
+        sameSite: 'none',
+        maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
+      });
+
+      res.json({ accessToken });
     } catch (err) {
       console.error('❌ OAuth login failed:', err?.response?.data || err.message);
       res.status(500).json({ error: 'OAuth login failed' });
     }
   });
 
-  // ✅ Auth Middleware
+  // ✅ Refresh token route
+  app.post('/api/refresh', (req, res) => {
+    const token = req.cookies.refreshToken;
+    if (!token) return res.status(401).json({ error: 'Missing refresh token' });
+
+    try {
+      const payload = jwt.verify(token, process.env.JWT_SECRET);
+
+      const newAccessToken = jwt.sign(
+        { id: payload.id },
+        process.env.JWT_SECRET,
+        { expiresIn: ACCESS_TOKEN_EXPIRES }
+      );
+
+      res.json({ accessToken: newAccessToken });
+    } catch {
+      res.status(401).json({ error: 'Invalid refresh token' });
+    }
+  });
+
+  // ✅ Logout route
+  app.post('/api/logout', (req, res) => {
+    res.clearCookie('refreshToken', {
+      httpOnly: true,
+      secure: true,
+      sameSite: 'none',
+    });
+    res.json({ success: true });
+  });
+
+  // ✅ Auth middleware (access token)
   function authMiddleware(req, res, next) {
     const token = req.header('Authorization')?.split(' ')[1];
     if (!token) return res.status(401).json({ error: 'Missing token' });
@@ -106,7 +157,7 @@ module.exports = (client) => {
     }
   }
 
-  // ✅ Protected API routes
+  // ✅ Secure endpoints
   app.use('/api', authMiddleware);
 
   app.get('/api/me', (req, res) => {
@@ -114,17 +165,11 @@ module.exports = (client) => {
   });
 
   app.get('/api/dashboard', async (req, res) => {
-    const totalGuilds = 4;
-    const activeUsers = 27;
-    const creditsSpent = 13200;
-    res.json({ totalGuilds, activeUsers, creditsSpent });
+    res.json({ totalGuilds: 4, activeUsers: 27, creditsSpent: 13200 });
   });
 
   app.get('/api/analytics', async (req, res) => {
-    const totalXP = 92410;
-    const creditsPurchased = 25600;
-    const activeServers = 7;
-    res.json({ totalXP, creditsPurchased, activeServers });
+    res.json({ totalXP: 92410, creditsPurchased: 25600, activeServers: 7 });
   });
 
   app.get('/api/users', async (req, res) => {
@@ -134,20 +179,16 @@ module.exports = (client) => {
   });
 
   app.get('/api/guilds/:guildId', async (req, res) => {
-    const guildId = req.params.guildId;
-    const doc = await db.collection('guildSettings').doc(guildId).get();
+    const doc = await db.collection('guildSettings').doc(req.params.guildId).get();
     if (!doc.exists) return res.status(404).json({ error: 'Guild not found' });
     res.json(doc.data());
   });
 
   app.post('/api/guilds/:guildId', async (req, res) => {
-    const guildId = req.params.guildId;
-    const settings = req.body;
-    await db.collection('guildSettings').doc(guildId).set(settings, { merge: true });
+    await db.collection('guildSettings').doc(req.params.guildId).set(req.body, { merge: true });
     res.json({ success: true });
   });
 
-  // ✅ Start the server
   app.listen(PORT, () => {
     console.log(`🚀 Monika API running on port ${PORT}`);
     console.log(`✅ CORS allowed from: ${corsOptions.origin.join(', ')}`);
