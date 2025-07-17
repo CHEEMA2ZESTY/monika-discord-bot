@@ -10,11 +10,22 @@ const {
 
 module.exports = async (event, client) => {
   try {
+    if (!event || typeof event !== 'object') {
+      console.warn('⚠️ Invalid webhook event:', event);
+      return;
+    }
+
     if (event.event !== 'charge.success') return;
 
-    const metadata = event.data.metadata || {};
-    const reference = event.data.reference || '';
-    const amount = event.data.amount / 100;
+    const data = event.data;
+    if (!data || typeof data !== 'object') {
+      console.warn('🚫 Missing or invalid event.data:', data);
+      return;
+    }
+
+    const metadata = data.metadata || {};
+    const reference = data.reference || '';
+    const amount = data.amount ? data.amount / 100 : 0;
     const now = Timestamp.fromDate(new Date());
 
     const guild = await client.guilds.fetch(process.env.GUILD_ID).catch(err => {
@@ -24,10 +35,16 @@ module.exports = async (event, client) => {
     if (!guild) return;
 
     const userId = metadata.discordUserId;
-    if (!userId) return;
+    if (!userId) {
+      console.warn('⚠️ Missing discordUserId in metadata:', metadata);
+      return;
+    }
 
     const member = await guild.members.fetch(userId).catch(() => null);
-    if (!member) return;
+    if (!member) {
+      console.warn(`⚠️ User ${userId} not found in guild`);
+      return;
+    }
 
     // ✅ Validate and clear the reference
     const refDoc = await db.collection('paymentReferences').doc(reference).get();
