@@ -5,29 +5,10 @@ const { REST, Routes } = require('discord.js');
 const client = require('./bot');
 require('./firebase');
 
-// 🛠️ Debug malformed Express paths before web.js loads
+// ✅ Use logger.js for tracing malformed Express routes
 const express = require('express');
-const originalUse = express.application.use;
-const originalGet = express.application.get;
-const originalPost = express.application.post;
-
-express.application.use = function (...args) {
-  const path = typeof args[0] === 'string' ? args[0] : '[Middleware]';
-  console.log('🧩 app.use() ->', path);
-  return originalUse.apply(this, args);
-};
-
-express.application.get = function (...args) {
-  const path = typeof args[0] === 'string' ? args[0] : '[Middleware]';
-  console.log('📥 app.get() ->', path);
-  return originalGet.apply(this, args);
-};
-
-express.application.post = function (...args) {
-  const path = typeof args[0] === 'string' ? args[0] : '[Middleware]';
-  console.log('📤 app.post() ->', path);
-  return originalPost.apply(this, args);
-};
+const app = express();
+require('./logger')(app); // 📦 This sets up route-level logging
 
 // ✅ Start Express API Server
 require('./web')(client);

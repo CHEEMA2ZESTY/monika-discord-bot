@@ -9,6 +9,9 @@ const handlePaystackEvent = require('./events/paystackWebhook');
 const db = require('./firebase');
 require('dotenv').config();
 
+// ✅ Logger for tracing routes
+require('./logger'); // logs on route registration
+
 module.exports = (client) => {
   const app = express();
 
