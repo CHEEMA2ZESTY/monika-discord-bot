@@ -10,7 +10,7 @@ const db = require('./firebase');
 require('dotenv').config();
 
 // ✅ Logger for tracing routes
-require('./logger'); // logs on route registration
+require('./utils/logger');
 
 module.exports = (client) => {
   const app = express();

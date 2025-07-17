@@ -8,7 +8,7 @@ require('./firebase');
 // ✅ Use logger.js for tracing malformed Express routes
 const express = require('express');
 const app = express();
-require('./logger')(app); // 📦 This sets up route-level logging
+require('./utils/logger');
 
 // ✅ Start Express API Server
 require('./web')(client);
