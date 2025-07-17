@@ -9,15 +9,12 @@ const handlePaystackEvent = require('./events/paystackWebhook');
 const db = require('./firebase');
 require('dotenv').config();
 
-// JWT expiry times
-const ACCESS_TOKEN_EXPIRES = '15m';
-const REFRESH_TOKEN_EXPIRES = '7d';
-
 module.exports = (client) => {
   const app = express();
+
   const PORT = parseInt(process.env.PORT) || 8080;
 
-  // ✅ CORS config
+  // ✅ CORS setup
   const corsOptions = {
     origin: ['http://localhost:5173', 'https://monika-dashboard.vercel.app'],
     methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
@@ -37,9 +34,8 @@ module.exports = (client) => {
   });
   app.use('/api/', apiLimiter);
 
-  // ✅ Webhook (raw body)
-  app.use('/paystack/webhook', express.raw({ type: 'application/json' }));
-  app.post('/paystack/webhook', async (req, res) => {
+  // ✅ Paystack Webhook (raw body only for this route)
+  app.post('/paystack/webhook', express.raw({ type: 'application/json' }), async (req, res) => {
     try {
       const signature = req.headers['x-paystack-signature'];
       const rawBody = req.body;
@@ -58,7 +54,7 @@ module.exports = (client) => {
     }
   });
 
-  // ✅ Login Route
+  // ✅ Login
   app.post('/api/login', async (req, res) => {
     const { code } = req.body;
     if (!code) return res.status(400).json({ error: 'Missing code' });
@@ -79,7 +75,6 @@ module.exports = (client) => {
       );
 
       const { access_token } = tokenResponse.data;
-
       const userResponse = await axios.get('https://discord.com/api/users/@me', {
         headers: { Authorization: `Bearer ${access_token}` },
       });
@@ -89,14 +84,12 @@ module.exports = (client) => {
       const accessToken = jwt.sign(
         { id: user.id, username: user.username, avatar: user.avatar },
         process.env.JWT_SECRET,
-        { expiresIn: ACCESS_TOKEN_EXPIRES }
+        { expiresIn: '15m' }
       );
 
-      const refreshToken = jwt.sign(
-        { id: user.id },
-        process.env.JWT_SECRET,
-        { expiresIn: REFRESH_TOKEN_EXPIRES }
-      );
+      const refreshToken = jwt.sign({ id: user.id }, process.env.JWT_SECRET, {
+        expiresIn: '7d',
+      });
 
       res.cookie('refreshToken', refreshToken, {
         httpOnly: true,
@@ -112,25 +105,23 @@ module.exports = (client) => {
     }
   });
 
-  // ✅ Refresh token route
+  // ✅ Refresh token
   app.post('/api/refresh', (req, res) => {
     const token = req.cookies.refreshToken;
     if (!token) return res.status(401).json({ error: 'Missing refresh token' });
 
     try {
       const payload = jwt.verify(token, process.env.JWT_SECRET);
-      const newAccessToken = jwt.sign(
-        { id: payload.id },
-        process.env.JWT_SECRET,
-        { expiresIn: ACCESS_TOKEN_EXPIRES }
-      );
+      const newAccessToken = jwt.sign({ id: payload.id }, process.env.JWT_SECRET, {
+        expiresIn: '15m',
+      });
       res.json({ accessToken: newAccessToken });
     } catch {
       res.status(401).json({ error: 'Invalid refresh token' });
     }
   });
 
-  // ✅ Logout route
+  // ✅ Logout
   app.post('/api/logout', (req, res) => {
     res.clearCookie('refreshToken', {
       httpOnly: true,
@@ -140,7 +131,7 @@ module.exports = (client) => {
     res.json({ success: true });
   });
 
-  // ✅ Public API routes (no auth)
+  // ✅ Dashboard & Analytics (public)
   app.get('/api/dashboard', async (req, res) => {
     res.json({ totalGuilds: 4, activeUsers: 27, creditsSpent: 13200 });
   });
@@ -150,7 +141,7 @@ module.exports = (client) => {
   });
 
   // ✅ Auth middleware
-  function authMiddleware(req, res, next) {
+  const authMiddleware = (req, res, next) => {
     const token = req.header('Authorization')?.split(' ')[1];
     if (!token) return res.status(401).json({ error: 'Missing token' });
 
@@ -160,9 +151,9 @@ module.exports = (client) => {
     } catch {
       res.status(401).json({ error: 'Invalid or expired token' });
     }
-  }
+  };
 
-  // ✅ Secure API router
+  // ✅ Protected API
   const secureApi = express.Router();
   secureApi.use(authMiddleware);
 
@@ -197,10 +188,10 @@ module.exports = (client) => {
     // 🐛 Debug route paths
     console.log(`🔍 Registered API Routes:`);
     app._router.stack
-      .filter((r) => r.route && r.route.path)
-      .forEach((r) => {
+      .filter(r => r.route && r.route.path)
+      .forEach(r => {
         const methods = Object.keys(r.route.methods)
-          .map((m) => m.toUpperCase())
+          .map(m => m.toUpperCase())
           .join(', ');
         console.log(`➡️  [${methods}] ${r.route.path}`);
       });
