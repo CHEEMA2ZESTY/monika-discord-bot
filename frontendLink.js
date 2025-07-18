@@ -1,20 +1,23 @@
-const cors = require('cors');
+// frontendlink.js
+const express = require('express');
+const passport = require('passport');
+const jwt = require('jsonwebtoken');
 
-module.exports = (app) => {
-  const allowedOrigins = ['https://monika-dashboard.vercel.app'];
+const router = express.Router();
 
-  app.use(cors({
-    origin: function (origin, callback) {
-      if (!origin || allowedOrigins.includes(origin)) {
-        callback(null, true);
-      } else {
-        callback(new Error('Not allowed by CORS'));
-      }
-    },
-    credentials: true
-  }));
+// Discord Login
+router.get('/auth/discord', passport.authenticate('discord'));
 
-  app.get('/', (req, res) => {
-    res.send('🌐 Backend is live and CORS-enabled for the frontend!');
-  });
-};
+// Discord OAuth Callback
+router.get('/auth/discord/callback',
+  passport.authenticate('discord', { failureRedirect: '/login', session: false }),
+  (req, res) => {
+    const token = jwt.sign({ id: req.user.id }, process.env.JWT_SECRET, {
+      expiresIn: '7d'
+    });
+
+    res.redirect(`https://monika-dashboard.vercel.app?token=${token}`);
+  }
+);
+
+module.exports = router;

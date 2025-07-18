@@ -1,3 +1,4 @@
+// web.js
 const express = require('express');
 const jwt = require('jsonwebtoken');
 const cookieParser = require('cookie-parser');
@@ -8,6 +9,9 @@ const db = require('./firebase');
 require('dotenv').config();
 require('./utils/logger');
 
+// ✅ FIXED: Ensure correct casing and that only ONE frontendLink.js file exists
+const frontendRoutes = require('./frontendLink');
+
 module.exports = (client) => {
   const app = express();
   const PORT = parseInt(process.env.PORT) || 8080;
@@ -15,15 +19,10 @@ module.exports = (client) => {
   app.use(cookieParser());
   app.use(express.json());
 
-  // Rate Limiting (Apply to all /api routes)
-  const apiLimiter = rateLimit({
-    windowMs: 15 * 60 * 1000, // 15 mins
-    max: 100,
-    message: 'Too many requests, please try again later.',
-  });
-  app.use('/api/', apiLimiter);
+  // ✅ Route linking frontend & Discord auth
+  app.use('/', frontendRoutes);
 
-  // 📦 Paystack Webhook
+  // ✅ Paystack Webhook Route
   app.post('/paystack/webhook', express.raw({ type: 'application/json' }), async (req, res) => {
     try {
       const signature = req.headers['x-paystack-signature'];
@@ -42,7 +41,7 @@ module.exports = (client) => {
     }
   });
 
-  // 🔒 JWT Auth Middleware
+  // 🔐 JWT Middleware
   const authMiddleware = (req, res, next) => {
     const token = req.header('Authorization')?.split(' ')[1];
     if (!token) return res.status(401).json({ error: 'Missing token' });
@@ -55,7 +54,7 @@ module.exports = (client) => {
     }
   };
 
-  // 🔐 Secure Backend API Routes
+  // 🔒 Secure API
   const secureApi = express.Router();
   secureApi.use(authMiddleware);
 
@@ -82,20 +81,5 @@ module.exports = (client) => {
 
   app.use('/api', secureApi);
 
-  // ✅ Start Server
-  app.listen(PORT, () => {
-    console.log(`🚀 Monika API running on port ${PORT}`);
-
-    if (app._router?.stack) {
-      console.log(`🔍 Registered API Routes:`);
-      app._router.stack
-        .filter(r => r.route && r.route.path)
-        .forEach(r => {
-          const methods = Object.keys(r.route.methods)
-            .map(m => m.toUpperCase())
-            .join(', ');
-          console.log(`➡️  [${methods}] ${r.route.path}`);
-        });
-    }
-  });
+  console.log('✅ Backend API routes registered');
 };
