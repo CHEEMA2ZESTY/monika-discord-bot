@@ -2,14 +2,27 @@ require('dotenv').config();
 const fs = require('fs');
 const path = require('path');
 const { REST, Routes } = require('discord.js');
+const express = require('express');
 const client = require('./bot');
 require('./firebase');
 require('./utils/logger');
 
-// Start Express API Server
-require('./web')(client);
+// Initialize Express App
+const app = express();
 
-// Environment Variable Check
+// 🔗 Link to Frontend
+require('./frontendLink')(app);
+
+// Start Express API Server (backend routes)
+require('./web')(client, app);
+
+// Start Server
+const PORT = process.env.PORT || 8080;
+app.listen(PORT, () => {
+  console.log(`🚀 Server is live on port ${PORT}`);
+});
+
+// Check Environment Variables
 if (!process.env.TOKEN || !process.env.CLIENT_ID || !process.env.GUILD_ID) {
   throw new Error('❌ Missing required environment variables in .env');
 }
@@ -32,7 +45,6 @@ console.log(`✅ Loaded ${commands.length} slash commands.`);
 
 // Load Events
 const eventsPath = path.join(__dirname, 'events');
-
 for (const file of fs.readdirSync(eventsPath).filter(f => f.endsWith('.js'))) {
   const event = require(`./events/${file}`);
   const bind = (...args) => event.execute(...args, client);
@@ -40,7 +52,7 @@ for (const file of fs.readdirSync(eventsPath).filter(f => f.endsWith('.js'))) {
 }
 console.log(`✅ Loaded ${fs.readdirSync(eventsPath).length} events.`);
 
-// Bot Login + Register Slash Commands
+// Bot Login and Register Slash Commands
 client.login(process.env.TOKEN).then(async () => {
   console.log(`✅ Logged in as ${client.user.tag}`);
 
@@ -57,13 +69,12 @@ client.login(process.env.TOKEN).then(async () => {
     console.error('❌ Failed to register slash commands:', err);
   }
 
-  // Start Cron Jobs
+  // Cron Jobs
   require('./utils/monthlySellerCreditScheduler');
   require('./utils/monthlyPriorityReset');
   require('./cron/resetBuyerMilestones');
   const { scheduleJTLDReset } = require('./utils/resetJTLDWeekly');
   scheduleJTLDReset(client);
-
 }).catch((err) => {
   console.error('❌ Bot failed to login:', err);
 });

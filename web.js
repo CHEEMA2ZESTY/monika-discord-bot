@@ -15,15 +15,15 @@ module.exports = (client) => {
   app.use(cookieParser());
   app.use(express.json());
 
-  // Rate limiting
+  // Rate Limiting (Apply to all /api routes)
   const apiLimiter = rateLimit({
-    windowMs: 15 * 60 * 1000,
+    windowMs: 15 * 60 * 1000, // 15 mins
     max: 100,
     message: 'Too many requests, please try again later.',
   });
   app.use('/api/', apiLimiter);
 
-  // Paystack Webhook
+  // 📦 Paystack Webhook
   app.post('/paystack/webhook', express.raw({ type: 'application/json' }), async (req, res) => {
     try {
       const signature = req.headers['x-paystack-signature'];
@@ -42,7 +42,7 @@ module.exports = (client) => {
     }
   });
 
-  // Auth middleware
+  // 🔒 JWT Auth Middleware
   const authMiddleware = (req, res, next) => {
     const token = req.header('Authorization')?.split(' ')[1];
     if (!token) return res.status(401).json({ error: 'Missing token' });
@@ -55,7 +55,7 @@ module.exports = (client) => {
     }
   };
 
-  // Protected API Routes (Discord backend settings)
+  // 🔐 Secure Backend API Routes
   const secureApi = express.Router();
   secureApi.use(authMiddleware);
 
@@ -82,10 +82,10 @@ module.exports = (client) => {
 
   app.use('/api', secureApi);
 
-  // Start server
+  // ✅ Start Server
   app.listen(PORT, () => {
     console.log(`🚀 Monika API running on port ${PORT}`);
-    
+
     if (app._router?.stack) {
       console.log(`🔍 Registered API Routes:`);
       app._router.stack
