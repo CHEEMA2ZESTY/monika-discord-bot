@@ -1,6 +1,5 @@
 const express = require('express');
 const jwt = require('jsonwebtoken');
-const axios = require('axios');
 const cookieParser = require('cookie-parser');
 const rateLimit = require('express-rate-limit');
 const { verifyPaystackSignature } = require('./utils/verifyPaystack');
@@ -56,7 +55,7 @@ module.exports = (client) => {
     }
   };
 
-  // Protected API
+  // Protected API Routes (Discord backend settings)
   const secureApi = express.Router();
   secureApi.use(authMiddleware);
 
@@ -86,16 +85,17 @@ module.exports = (client) => {
   // Start server
   app.listen(PORT, () => {
     console.log(`🚀 Monika API running on port ${PORT}`);
-
-    // Debug route paths
-    console.log(`🔍 Registered API Routes:`);
-    app._router.stack
-      .filter(r => r.route && r.route.path)
-      .forEach(r => {
-        const methods = Object.keys(r.route.methods)
-          .map(m => m.toUpperCase())
-          .join(', ');
-        console.log(`➡️  [${methods}] ${r.route.path}`);
-      });
+    
+    if (app._router?.stack) {
+      console.log(`🔍 Registered API Routes:`);
+      app._router.stack
+        .filter(r => r.route && r.route.path)
+        .forEach(r => {
+          const methods = Object.keys(r.route.methods)
+            .map(m => m.toUpperCase())
+            .join(', ');
+          console.log(`➡️  [${methods}] ${r.route.path}`);
+        });
+    }
   });
 };
