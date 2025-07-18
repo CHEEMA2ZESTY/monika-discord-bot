@@ -4,21 +4,17 @@ const path = require('path');
 const { REST, Routes } = require('discord.js');
 const client = require('./bot');
 require('./firebase');
-
-// ✅ Use logger.js for tracing malformed Express routes
-const express = require('express');
-const app = express();
 require('./utils/logger');
 
-// ✅ Start Express API Server
+// Start Express API Server
 require('./web')(client);
 
-// ✅ Environment Variable Check
+// Environment Variable Check
 if (!process.env.TOKEN || !process.env.CLIENT_ID || !process.env.GUILD_ID) {
   throw new Error('❌ Missing required environment variables in .env');
 }
 
-// 🧠 Load Slash Commands
+// Load Slash Commands
 const commands = [];
 const commandsPath = path.join(__dirname, 'commands');
 
@@ -34,7 +30,7 @@ for (const folder of fs.readdirSync(commandsPath)) {
 }
 console.log(`✅ Loaded ${commands.length} slash commands.`);
 
-// 🎧 Load Events
+// Load Events
 const eventsPath = path.join(__dirname, 'events');
 
 for (const file of fs.readdirSync(eventsPath).filter(f => f.endsWith('.js'))) {
@@ -44,7 +40,7 @@ for (const file of fs.readdirSync(eventsPath).filter(f => f.endsWith('.js'))) {
 }
 console.log(`✅ Loaded ${fs.readdirSync(eventsPath).length} events.`);
 
-// 🤖 Bot Login + Register Slash Commands
+// Bot Login + Register Slash Commands
 client.login(process.env.TOKEN).then(async () => {
   console.log(`✅ Logged in as ${client.user.tag}`);
 
@@ -61,7 +57,7 @@ client.login(process.env.TOKEN).then(async () => {
     console.error('❌ Failed to register slash commands:', err);
   }
 
-  // 🔁 Start Cron Jobs
+  // Start Cron Jobs
   require('./utils/monthlySellerCreditScheduler');
   require('./utils/monthlyPriorityReset');
   require('./cron/resetBuyerMilestones');
