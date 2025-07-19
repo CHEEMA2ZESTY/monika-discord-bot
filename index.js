@@ -17,14 +17,23 @@ require('./auth/passport'); // 👈 Load passport config
 const app = express();
 
 // ✅ CORS & Middleware Setup
+const allowedOrigins = process.env.CORS_ORIGIN?.split(',') || ['http://localhost:5173'];
+
 app.use(cors({
-  origin: process.env.CORS_ORIGIN || 'http://localhost:5173',
+  origin: function (origin, callback) {
+    if (!origin || allowedOrigins.includes(origin)) {
+      callback(null, true);
+    } else {
+      callback(new Error(`Not allowed by CORS: ${origin}`));
+    }
+  },
   credentials: true,
 }));
+
 app.use(express.json());
 app.use(cookieParser());
 
-// ✅ Session Setup (needed for passport to track user login)
+// ✅ Session Setup
 app.use(session({
   secret: process.env.SESSION_SECRET || 'supersecret',
   resave: false,
