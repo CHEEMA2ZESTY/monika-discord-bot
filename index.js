@@ -4,30 +4,32 @@ const path = require('path');
 const { REST, Routes } = require('discord.js');
 const express = require('express');
 const client = require('./bot');
+
+// Initialize Firebase and Logger
 require('./firebase');
 require('./utils/logger');
 
 // Initialize Express App
 const app = express();
 
-// 🔗 Link to Frontend
+// 🔗 Connect Frontend Routes (e.g., /auth/discord)
 require('./frontendLink')(app);
 
-// Start Express API Server (backend routes)
+// 🎯 Backend Routes & Webhooks (e.g., Paystack webhook)
 require('./web')(client, app);
 
-// Start Server
+// Start Express Server
 const PORT = process.env.PORT || 8080;
 app.listen(PORT, () => {
   console.log(`🚀 Server is live on port ${PORT}`);
 });
 
-// Check Environment Variables
+// Validate Required Environment Variables
 if (!process.env.TOKEN || !process.env.CLIENT_ID || !process.env.GUILD_ID) {
   throw new Error('❌ Missing required environment variables in .env');
 }
 
-// Load Slash Commands
+// Slash Command Loader
 const commands = [];
 const commandsPath = path.join(__dirname, 'commands');
 
@@ -43,7 +45,7 @@ for (const folder of fs.readdirSync(commandsPath)) {
 }
 console.log(`✅ Loaded ${commands.length} slash commands.`);
 
-// Load Events
+// Event Loader
 const eventsPath = path.join(__dirname, 'events');
 for (const file of fs.readdirSync(eventsPath).filter(f => f.endsWith('.js'))) {
   const event = require(`./events/${file}`);
@@ -52,7 +54,7 @@ for (const file of fs.readdirSync(eventsPath).filter(f => f.endsWith('.js'))) {
 }
 console.log(`✅ Loaded ${fs.readdirSync(eventsPath).length} events.`);
 
-// Bot Login and Register Slash Commands
+// Bot Login & Slash Command Registration
 client.login(process.env.TOKEN).then(async () => {
   console.log(`✅ Logged in as ${client.user.tag}`);
 
@@ -69,7 +71,7 @@ client.login(process.env.TOKEN).then(async () => {
     console.error('❌ Failed to register slash commands:', err);
   }
 
-  // Cron Jobs
+  // 🕒 Scheduled Tasks
   require('./utils/monthlySellerCreditScheduler');
   require('./utils/monthlyPriorityReset');
   require('./cron/resetBuyerMilestones');

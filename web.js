@@ -1,4 +1,6 @@
 // web.js
+
+const express = require('express'); // ✅ Import express (was missing before)
 const jwt = require('jsonwebtoken');
 const cookieParser = require('cookie-parser');
 const { verifyPaystackSignature } = require('./utils/verifyPaystack');
@@ -46,7 +48,7 @@ module.exports = (client, app) => {
   };
 
   // 🔒 Secure API Routes
-  const secureApi = require('express').Router();
+  const secureApi = express.Router();
   secureApi.use(authMiddleware);
 
   secureApi.get('/me', (req, res) => {
