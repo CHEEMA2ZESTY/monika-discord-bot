@@ -2,14 +2,17 @@ require('dotenv').config();
 const fs = require('fs');
 const path = require('path');
 const express = require('express');
+const session = require('express-session');
 const cookieParser = require('cookie-parser');
 const cors = require('cors');
+const passport = require('passport');
 const { REST, Routes } = require('discord.js');
 const client = require('./bot');
 
-// Initialize Firebase and Logger
+// Initialize Firebase, Logger, and Passport Strategy
 require('./firebase');
 require('./utils/logger');
+require('./auth/passport'); // 👈 Load passport config
 
 const app = express();
 
@@ -20,6 +23,21 @@ app.use(cors({
 }));
 app.use(express.json());
 app.use(cookieParser());
+
+// ✅ Session Setup (needed for passport to track user login)
+app.use(session({
+  secret: process.env.SESSION_SECRET || 'supersecret',
+  resave: false,
+  saveUninitialized: false,
+  cookie: {
+    maxAge: 1000 * 60 * 60 * 24, // 1 day
+    sameSite: 'lax',
+  },
+}));
+
+// ✅ Passport Initialization
+app.use(passport.initialize());
+app.use(passport.session());
 
 // 🔗 Frontend Link (e.g., /auth/discord)
 require('./frontendLink')(app);
