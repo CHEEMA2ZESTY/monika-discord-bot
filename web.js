@@ -1,26 +1,17 @@
 // web.js
-const express = require('express');
 const jwt = require('jsonwebtoken');
 const cookieParser = require('cookie-parser');
-const rateLimit = require('express-rate-limit');
 const { verifyPaystackSignature } = require('./utils/verifyPaystack');
 const handlePaystackEvent = require('./events/paystackWebhook');
 const db = require('./firebase');
 require('dotenv').config();
 require('./utils/logger');
 
-// ✅ FIXED: Ensure correct casing and that only ONE frontendLink.js file exists
-const frontendRoutes = require('./frontendLink');
-
-module.exports = (client) => {
-  const app = express();
+module.exports = (client, app) => {
   const PORT = parseInt(process.env.PORT) || 8080;
 
   app.use(cookieParser());
   app.use(express.json());
-
-  // ✅ Route linking frontend & Discord auth
-  app.use('/', frontendRoutes);
 
   // ✅ Paystack Webhook Route
   app.post('/paystack/webhook', express.raw({ type: 'application/json' }), async (req, res) => {
@@ -54,8 +45,8 @@ module.exports = (client) => {
     }
   };
 
-  // 🔒 Secure API
-  const secureApi = express.Router();
+  // 🔒 Secure API Routes
+  const secureApi = require('express').Router();
   secureApi.use(authMiddleware);
 
   secureApi.get('/me', (req, res) => {
