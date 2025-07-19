@@ -78,22 +78,24 @@ module.exports = (client, app) => {
         expiresIn: '7d',
       });
 
-      res.cookie('token', token, {
+      // 🍪 Set JWT as HttpOnly cookie
+      res.cookie('monika_jwt', token, {
         httpOnly: true,
         secure: process.env.NODE_ENV === 'production',
+        sameSite: 'Lax', // or 'None' if cross-site requests are needed
         maxAge: 7 * 24 * 60 * 60 * 1000,
       });
 
-      res.json({ success: true, user: payload });
+      res.status(200).json({ success: true });
     } catch (err) {
       console.error('❌ Error exchanging token:', err);
       res.status(500).json({ error: 'Internal server error' });
     }
   });
 
-  // 🔐 JWT Middleware
+  // 🔐 JWT Middleware (reads from cookie!)
   const authMiddleware = (req, res, next) => {
-    const token = req.header('Authorization')?.split(' ')[1];
+    const token = req.cookies.monika_jwt;
     if (!token) return res.status(401).json({ error: 'Missing token' });
 
     try {
