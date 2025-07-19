@@ -48,6 +48,10 @@ app.use(session({
 app.use(passport.initialize());
 app.use(passport.session());
 
+// 🔗 Mount the new auth routes
+const authRoutes = require('./routes/auth'); // import your updated auth.js
+app.use('/auth', authRoutes); // mount at /auth
+
 // 🔗 Frontend Link (e.g., /auth/discord)
 require('./frontendLink')(app);
 
