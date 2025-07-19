@@ -1,8 +1,7 @@
-// web.js
-
-const express = require('express'); // ✅ Import express (was missing before)
+const express = require('express');
 const jwt = require('jsonwebtoken');
 const cookieParser = require('cookie-parser');
+const fetch = require('node-fetch');
 const { verifyPaystackSignature } = require('./utils/verifyPaystack');
 const handlePaystackEvent = require('./events/paystackWebhook');
 const db = require('./firebase');
@@ -31,6 +30,64 @@ module.exports = (client, app) => {
     } catch (err) {
       console.error('🔥 Webhook error:', err);
       res.status(500).send('Webhook handler crashed');
+    }
+  });
+
+  // 🔐 Auth Token Exchange Route
+  app.post('/auth/token', async (req, res) => {
+    const code = req.body.code;
+    if (!code) return res.status(400).json({ error: 'Missing code' });
+
+    try {
+      const params = new URLSearchParams({
+        client_id: process.env.CLIENT_ID,
+        client_secret: process.env.CLIENT_SECRET,
+        grant_type: 'authorization_code',
+        code,
+        redirect_uri: process.env.REDIRECT_URI,
+      });
+
+      const tokenRes = await fetch('https://discord.com/api/oauth2/token', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/x-www-form-urlencoded',
+        },
+        body: params,
+      });
+
+      const tokenData = await tokenRes.json();
+      if (!tokenData.access_token) {
+        return res.status(400).json({ error: 'Invalid token exchange', detail: tokenData });
+      }
+
+      const userRes = await fetch('https://discord.com/api/users/@me', {
+        headers: {
+          Authorization: `Bearer ${tokenData.access_token}`,
+        },
+      });
+      const user = await userRes.json();
+
+      const payload = {
+        id: user.id,
+        username: user.username,
+        discriminator: user.discriminator,
+        avatar: user.avatar,
+      };
+
+      const token = jwt.sign(payload, process.env.JWT_SECRET, {
+        expiresIn: '7d',
+      });
+
+      res.cookie('token', token, {
+        httpOnly: true,
+        secure: process.env.NODE_ENV === 'production',
+        maxAge: 7 * 24 * 60 * 60 * 1000,
+      });
+
+      res.json({ success: true, user: payload });
+    } catch (err) {
+      console.error('❌ Error exchanging token:', err);
+      res.status(500).json({ error: 'Internal server error' });
     }
   });
 

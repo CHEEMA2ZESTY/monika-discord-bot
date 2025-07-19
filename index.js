@@ -1,35 +1,44 @@
 require('dotenv').config();
 const fs = require('fs');
 const path = require('path');
-const { REST, Routes } = require('discord.js');
 const express = require('express');
+const cookieParser = require('cookie-parser');
+const cors = require('cors');
+const { REST, Routes } = require('discord.js');
 const client = require('./bot');
 
 // Initialize Firebase and Logger
 require('./firebase');
 require('./utils/logger');
 
-// Initialize Express App
 const app = express();
 
-// 🔗 Connect Frontend Routes (e.g., /auth/discord)
+// ✅ CORS & Middleware Setup
+app.use(cors({
+  origin: process.env.CORS_ORIGIN || 'http://localhost:5173',
+  credentials: true,
+}));
+app.use(express.json());
+app.use(cookieParser());
+
+// 🔗 Frontend Link (e.g., /auth/discord)
 require('./frontendLink')(app);
 
-// 🎯 Backend Routes & Webhooks (e.g., Paystack webhook)
+// 🎯 Backend Routes & Webhooks
 require('./web')(client, app);
 
-// Start Express Server
+// Start Server
 const PORT = process.env.PORT || 8080;
 app.listen(PORT, () => {
   console.log(`🚀 Server is live on port ${PORT}`);
 });
 
-// Validate Required Environment Variables
+// 🌍 Environment Check
 if (!process.env.TOKEN || !process.env.CLIENT_ID || !process.env.GUILD_ID) {
   throw new Error('❌ Missing required environment variables in .env');
 }
 
-// Slash Command Loader
+// 🛠 Slash Commands Setup
 const commands = [];
 const commandsPath = path.join(__dirname, 'commands');
 
@@ -45,7 +54,7 @@ for (const folder of fs.readdirSync(commandsPath)) {
 }
 console.log(`✅ Loaded ${commands.length} slash commands.`);
 
-// Event Loader
+// 📡 Event Loader
 const eventsPath = path.join(__dirname, 'events');
 for (const file of fs.readdirSync(eventsPath).filter(f => f.endsWith('.js'))) {
   const event = require(`./events/${file}`);
@@ -54,12 +63,11 @@ for (const file of fs.readdirSync(eventsPath).filter(f => f.endsWith('.js'))) {
 }
 console.log(`✅ Loaded ${fs.readdirSync(eventsPath).length} events.`);
 
-// Bot Login & Slash Command Registration
+// 🤖 Bot Login & Slash Command Registration
 client.login(process.env.TOKEN).then(async () => {
   console.log(`✅ Logged in as ${client.user.tag}`);
 
   const rest = new REST({ version: '10' }).setToken(process.env.TOKEN);
-
   try {
     console.log('🔄 Registering slash commands...');
     await rest.put(
@@ -71,7 +79,7 @@ client.login(process.env.TOKEN).then(async () => {
     console.error('❌ Failed to register slash commands:', err);
   }
 
-  // 🕒 Scheduled Tasks
+  // 📆 Scheduled Tasks
   require('./utils/monthlySellerCreditScheduler');
   require('./utils/monthlyPriorityReset');
   require('./cron/resetBuyerMilestones');
