@@ -82,7 +82,7 @@ module.exports = (client, app) => {
       res.cookie('monika_jwt', token, {
         httpOnly: true,
         secure: process.env.NODE_ENV === 'production',
-        sameSite: 'Lax', // or 'None' if cross-site requests are needed
+        sameSite: 'Lax',
         maxAge: 7 * 24 * 60 * 60 * 1000,
       });
 
@@ -129,6 +129,23 @@ module.exports = (client, app) => {
   secureApi.post('/guilds/:guildId', async (req, res) => {
     await db.collection('guildSettings').doc(req.params.guildId).set(req.body, { merge: true });
     res.json({ success: true });
+  });
+
+  // ✅ New: Stats Overview Route
+  secureApi.get('/stats/overview', async (req, res) => {
+    try {
+      // Replace with real analytics data later
+      res.json({
+        totalUsers: 120,
+        totalSales: 35000,
+        activeGuilds: 15,
+        premiumUsers: 5,
+        pendingPayouts: 2,
+      });
+    } catch (err) {
+      console.error('❌ Error fetching stats:', err);
+      res.status(500).json({ error: 'Failed to load stats' });
+    }
   });
 
   app.use('/api', secureApi);
