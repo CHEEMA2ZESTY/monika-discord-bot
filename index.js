@@ -33,14 +33,15 @@ app.use(cors({
 app.use(express.json());
 app.use(cookieParser());
 
-// ✅ Session Setup
+// ✅ Session Setup (Fixed 👇)
 app.use(session({
   secret: process.env.SESSION_SECRET || 'supersecret',
   resave: false,
   saveUninitialized: false,
   cookie: {
     maxAge: 1000 * 60 * 60 * 24, // 1 day
-    sameSite: 'lax',
+    sameSite: 'none',            // ✅ Allow cross-origin redirects
+    secure: true,                // ✅ Ensure cookies are sent over HTTPS
   },
 }));
 
@@ -49,10 +50,10 @@ app.use(passport.initialize());
 app.use(passport.session());
 
 // 🔗 Mount the new auth routes
-const authRoutes = require('./routes/auth'); // import your updated auth.js
-app.use('/auth', authRoutes); // mount at /auth
+const authRoutes = require('./routes/auth');
+app.use('/auth', authRoutes);
 
-// 🔗 Frontend Link (e.g., /auth/discord)
+// 🔗 Frontend Link
 require('./frontendLink')(app);
 
 // 🎯 Backend Routes & Webhooks
