@@ -2,6 +2,7 @@ const express = require('express');
 const jwt = require('jsonwebtoken');
 const cookieParser = require('cookie-parser');
 const fetch = require('node-fetch');
+const cors = require('cors');
 const { verifyPaystackSignature } = require('./utils/verifyPaystack');
 const handlePaystackEvent = require('./events/paystackWebhook');
 const db = require('./firebase');
@@ -12,9 +13,14 @@ module.exports = (client, app) => {
   const PORT = parseInt(process.env.PORT) || 8080;
 
   app.use(cookieParser());
-  app.use(express.json());
 
-  // ✅ Paystack Webhook Route
+  // 🛡️ CORS Setup for secure cookie cross-origin usage (important for frontend)
+  app.use(cors({
+    origin: process.env.FRONTEND_URL, // e.g. https://monika-dashboard-production.up.railway.app
+    credentials: true,
+  }));
+
+  // ✅ Paystack Webhook (must go before express.json!)
   app.post('/paystack/webhook', express.raw({ type: 'application/json' }), async (req, res) => {
     try {
       const signature = req.headers['x-paystack-signature'];
@@ -33,6 +39,9 @@ module.exports = (client, app) => {
     }
   });
 
+  // Use JSON body parser AFTER Paystack webhook
+  app.use(express.json());
+
   // 🔐 Auth Token Exchange Route
   app.post('/auth/token', async (req, res) => {
     const code = req.body.code;
@@ -49,9 +58,7 @@ module.exports = (client, app) => {
 
       const tokenRes = await fetch('https://discord.com/api/oauth2/token', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/x-www-form-urlencoded',
-        },
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
         body: params,
       });
 
@@ -83,7 +90,7 @@ module.exports = (client, app) => {
         httpOnly: true,
         secure: process.env.NODE_ENV === 'production',
         sameSite: 'Lax',
-        maxAge: 7 * 24 * 60 * 60 * 1000,
+        maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
       });
 
       res.status(200).json({ success: true });
@@ -93,7 +100,7 @@ module.exports = (client, app) => {
     }
   });
 
-  // 🔐 JWT Middleware (reads from cookie!)
+  // 🔐 JWT Middleware (reads from cookie)
   const authMiddleware = (req, res, next) => {
     const token = req.cookies.monika_jwt;
     if (!token) return res.status(401).json({ error: 'Missing token' });
@@ -131,10 +138,9 @@ module.exports = (client, app) => {
     res.json({ success: true });
   });
 
-  // ✅ New: Stats Overview Route
+  // 📊 Stats Overview Route
   secureApi.get('/stats/overview', async (req, res) => {
     try {
-      // Replace with real analytics data later
       res.json({
         totalUsers: 120,
         totalSales: 35000,
