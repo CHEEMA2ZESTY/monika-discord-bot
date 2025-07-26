@@ -16,19 +16,21 @@ require('./auth/passport');
 
 const app = express();
 
-// ✅ Allowed Origins (local + Vercel frontend)
+// ✅ Allowed Origins (static ones)
 const allowedOrigins = [
   'http://localhost:5173',
   'https://monika-dashboard.vercel.app'
 ];
 
-// ✅ CORS (MUST come before any session/cookie middleware)
+// ✅ CORS with dynamic Vercel preview support
 app.use(cors({
   origin: function (origin, callback) {
-    if (!origin || allowedOrigins.includes(origin)) {
+    const vercelRegex = /^https:\/\/monika-dashboard(-git-[a-zA-Z0-9-]+)?\.vercel\.app$/;
+
+    if (!origin || allowedOrigins.includes(origin) || vercelRegex.test(origin)) {
       callback(null, true);
     } else {
-      callback(new Error(`Not allowed by CORS: ${origin}`));
+      callback(new Error(`❌ Not allowed by CORS: ${origin}`));
     }
   },
   credentials: true,
